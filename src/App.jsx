@@ -12,7 +12,7 @@ import Dashboard from './pages/Dashboard';
 import Expenses from './pages/Expenses';
 import Taxes from './pages/Impuestos';
 import Journal from './pages/Journal'; // <--- NUEVA PÁGINA (Contabilidad)
-import Reports from './pages/Reports';
+import Reports from './pages/Reportes';
 import Incomes from './pages/Incomes';
 import Patients from './pages/Patients';
 import Settings from './pages/Settings';
