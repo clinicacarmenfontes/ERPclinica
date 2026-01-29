@@ -12,12 +12,13 @@ import {
   Settings 
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+// IMPORTANTE: Asegúrate de que la ruta al logo es correcta
+import logo from '../assets/logo_completo.svg'; 
 
 export default function Sidebar() {
   const { signOut } = useAuth();
 
   const navItems = [
-    // CORRECCIÓN AQUÍ: Apuntamos a /dashboard, no a / (que es el login)
     { to: "/dashboard", icon: <LayoutDashboard size={20} />, label: "Dashboard" },
     { to: "/patients", icon: <Users size={20} />, label: "Pacientes" },
     { to: "/incomes", icon: <TrendingUp size={20} />, label: "Ingresos" },
@@ -29,8 +30,13 @@ export default function Sidebar() {
 
   return (
     <aside className="w-64 bg-[#f4f0ec] border-r border-[#e6e1db] flex flex-col h-screen shrink-0 z-30">
-      <div className="p-8">
-        <h1 className="text-2xl font-serif text-[#8a5a62] tracking-wide">CARMEN FONTES</h1>
+      {/* LOGO AREA */}
+      <div className="p-6 flex justify-center items-center mb-2">
+        <img 
+            src={logo} 
+            alt="Clínica Carmen Fontes" 
+            className="w-full max-w-[160px] h-auto object-contain" 
+        />
       </div>
 
       <nav className="flex-1 px-4 flex flex-col gap-2">
