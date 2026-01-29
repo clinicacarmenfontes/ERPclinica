@@ -6,16 +6,16 @@ import { NotificationProvider } from './context/NotificationContext';
 import { DateProvider } from './context/DateContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
-// Páginas
+// Páginas (NOMBRES EN ESPAÑOL para evitar error de Vercel)
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Expenses from './pages/Expenses';
-import Taxes from './pages/Impuestos';
-import Journal from './pages/Journal'; // <--- NUEVA PÁGINA (Contabilidad)
-import Reports from './pages/Reportes';
-import Incomes from './pages/Incomes';
-import Patients from './pages/Patients';
-import Settings from './pages/Settings';
+import Dashboard from './pages/Resumen';       // Archivo físico: Resumen.jsx
+import Expenses from './pages/Gastos';         // Archivo físico: Gastos.jsx
+import Taxes from './pages/Impuestos';         // Archivo físico: Impuestos.jsx
+import Journal from './pages/Contabilidad';    // Archivo físico: Contabilidad.jsx
+import Reports from './pages/Reportes';        // Archivo físico: Reportes.jsx
+import Incomes from './pages/Ingresos';        // Archivo físico: Ingresos.jsx
+import Patients from './pages/Pacientes';      // Archivo físico: Pacientes.jsx
+import Settings from './pages/Configuracion';  // Archivo físico: Configuracion.jsx
 
 // --- COMPONENTE DE PROTECCIÓN ---
 const ProtectedRoute = ({ children }) => {
@@ -42,9 +42,10 @@ function App() {
               <Route path="/incomes" element={<ProtectedRoute><Incomes /></ProtectedRoute>} />
               <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
               
-              <Route path="/Impuestos" element={<ProtectedRoute><Taxes /></ProtectedRoute>} />
-              <Route path="/journal" element={<ProtectedRoute><Journal /></ProtectedRoute>} /> {/* <--- NUEVA RUTA */}
+              {/* CORRECCIÓN: path="/taxes" para que coincida con el Sidebar */}
+              <Route path="/taxes" element={<ProtectedRoute><Taxes /></ProtectedRoute>} />
               
+              <Route path="/journal" element={<ProtectedRoute><Journal /></ProtectedRoute>} />
               <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} /> 
 
@@ -58,5 +59,3 @@ function App() {
 }
 
 export default App;
-
-// Forzando despliegue Vercel v2
