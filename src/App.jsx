@@ -10,7 +10,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Expenses from './pages/Expenses';
-import Taxes from './pages/Taxes';
+import Taxes from './pages/Impuestos';
 import Journal from './pages/Journal'; // <--- NUEVA PÁGINA (Contabilidad)
 import Reports from './pages/Reports';
 import Incomes from './pages/Incomes';
@@ -58,3 +58,5 @@ function App() {
 }
 
 export default App;
+
+// Forzando actualización de Vercel
