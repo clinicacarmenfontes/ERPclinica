@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#b87a7a",
+                        "background-light": "#f7f6f6",
+                        "background-dark": "#1c1616",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<title>Registration Success</title>
+</head>
+<body class="font-display bg-[#F1EFE7] dark:bg-background-dark min-h-screen flex flex-col items-center justify-center p-4 antialiased">
+<!-- Success Card Component -->
+<main class="w-full max-w-[560px] animate-fade-in-up">
+<div class="bg-white dark:bg-[#252020] rounded-lg shadow-xl overflow-hidden relative border border-white/20 dark:border-white/5">
+<!-- Decorative Top Bar -->
+<div class="h-2 w-full bg-gradient-to-r from-[#546051] to-primary"></div>
+<div class="p-10 sm:p-14 flex flex-col items-center text-center">
+<!-- Success Icon -->
+<div class="mb-8 relative group">
+<!-- Outer ring effect -->
+<div class="absolute inset-0 bg-[#546051] opacity-10 rounded-full scale-150 animate-pulse"></div>
+<div class="h-24 w-24 rounded-full bg-[#546051]/10 flex items-center justify-center relative z-10">
+<span class="material-symbols-outlined text-[#546051] text-[64px] font-bold">check</span>
+</div>
+</div>
+<!-- Content -->
+<div class="flex flex-col gap-3 mb-10">
+<h1 class="text-[#161313] dark:text-white text-3xl sm:text-4xl font-bold tracking-tight">
+                        ¡Todo listo, Doctor!
+                    </h1>
+<p class="text-gray-500 dark:text-gray-400 text-lg leading-relaxed max-w-[400px] mx-auto">
+                        Tu clínica Optimydent Connect está configurada y lista para empezar.
+                    </p>
+</div>
+<!-- Primary Action -->
+<button class="w-full bg-primary hover:bg-[#a66d6d] text-white font-bold h-14 rounded-DEFAULT transition-all duration-200 transform hover:-translate-y-0.5 shadow-md hover:shadow-lg flex items-center justify-center gap-3 text-[15px]">
+<span>Acceder a mi Dashboard</span>
+<span class="material-symbols-outlined text-xl">arrow_forward</span>
+</button>
+<!-- Secondary Action / Help -->
+<div class="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 w-full">
+<p class="text-sm text-gray-400 dark:text-gray-500">
+                        ¿Necesitas ayuda? 
+                        <a class="text-primary hover:text-primary/80 font-medium hover:underline ml-1" href="#">Contactar soporte</a>
+</p>
+</div>
+</div>
+</div>
+<!-- Footer Branding -->
+<div class="mt-8 text-center opacity-60">
+<div class="flex items-center justify-center gap-2 mb-2">
+<span class="material-symbols-outlined text-gray-500 dark:text-gray-400">dentistry</span>
+<span class="text-sm font-semibold text-gray-600 dark:text-gray-400 tracking-wide uppercase">Optimydent Connect</span>
+</div>
+</div>
+</main>
+</body></html>

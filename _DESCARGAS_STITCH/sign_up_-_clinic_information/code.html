@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sign Up - Clinic Information</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#b87a7a",
+                        "background-light": "#f7f6f6",
+                        "background-dark": "#1c1616",
+                        "sand-border": "#e5e2df",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "0.75rem",
+                        "xl": "1rem",
+                        "2xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Hide scrollbar for clean look in split screen */
+        ::-webkit-scrollbar {
+            width: 0px;
+            background: transparent;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-[#161313] dark:text-white h-screen overflow-hidden flex flex-col lg:flex-row">
+<!-- Left Side: Branding Panel -->
+<div class="relative hidden lg:flex lg:w-5/12 xl:w-1/2 flex-col justify-between bg-primary p-12 text-white overflow-hidden">
+<!-- Abstract Background Pattern -->
+<div class="absolute inset-0 z-0 opacity-20 bg-cover bg-center mix-blend-overlay" data-alt="abstract architectural curves and modern shapes" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBTK37TexWwcs7P0NDqcFqAmhV7MXAc6nTEvQmiAkwNzGnjn37pAcDYTeCJ6aN5499Afp9oe0w2Cafw9CkVNj_dL2UTIG_LTKTGJbFb5aecOJkBz4ztYfs0zu8Mq25ZqcTgEPR0Uc2Qck4qJXcf1z6qBIgDZPjWdRenUPSKD3hahQAEBLHQk8ThFVLjqs6EnG0oktsHg1snU0KFM-s3hPRY0iB4BaLS1Szp--9Ws_7QySxTBirXkB5BiyBC0SU3Q66-qJ0h1tmte8I');">
+</div>
+<div class="absolute inset-0 bg-gradient-to-b from-primary/80 to-primary z-0"></div>
+<!-- Content -->
+<div class="relative z-10 flex flex-col h-full justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-3xl">dentistry</span>
+<span class="text-xl font-bold tracking-tight">Optimydent Connect</span>
+</div>
+<div class="mb-10">
+<h1 class="text-4xl xl:text-5xl font-black leading-tight tracking-tight mb-6">
+                    Simplifying dental finance for modern clinics.
+                </h1>
+<p class="text-white/80 text-lg max-w-md leading-relaxed">
+                    Join thousands of clinics optimizing their financial health with our dedicated tools.
+                </p>
+</div>
+<div class="flex items-center gap-4 text-sm font-medium text-white/60">
+<span>© 2023 Optimydent</span>
+<span>•</span>
+<a class="hover:text-white transition-colors" href="#">Privacy</a>
+<span>•</span>
+<a class="hover:text-white transition-colors" href="#">Terms</a>
+</div>
+</div>
+</div>
+<!-- Right Side: Form Panel -->
+<div class="flex-1 w-full h-full overflow-y-auto bg-white dark:bg-background-dark flex flex-col">
+<!-- Mobile Header (Visible only on small screens) -->
+<div class="lg:hidden p-6 bg-primary text-white flex justify-between items-center">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined">dentistry</span>
+<span class="font-bold">Optimydent</span>
+</div>
+</div>
+<div class="flex-1 flex flex-col justify-center items-center p-6 md:p-12 lg:p-20">
+<div class="w-full max-w-[480px] flex flex-col gap-8">
+<!-- Progress Indicator -->
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-end mb-2">
+<span class="text-sm font-medium text-primary dark:text-primary/80">Step 2 of 2</span>
+<span class="text-xs text-[#7c6e6e] dark:text-gray-400">Clinic Details</span>
+</div>
+<div class="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-full rounded-full"></div>
+</div>
+</div>
+<!-- Header -->
+<div>
+<h2 class="text-3xl font-bold tracking-tight text-[#161313] dark:text-white mb-2">Datos de tu Clínica</h2>
+<p class="text-[#7c6e6e] dark:text-gray-400">Please provide your clinic's legal details to finish setting up your account.</p>
+</div>
+<!-- Form -->
+<form class="flex flex-col gap-5" onsubmit="event.preventDefault();">
+<!-- Field: Clinic Name -->
+<div class="flex flex-col gap-2">
+<label class="text-sm font-medium text-[#161313] dark:text-gray-200">
+                            Nombre de la Clínica
+                        </label>
+<div class="relative">
+<input class="w-full h-14 px-4 rounded-xl border border-sand-border bg-white dark:bg-[#2a2424] dark:border-[#443d3d] dark:text-white text-[#161313] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm" placeholder="Ej. Clínica Dental Sonrisas" type="text"/>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">business</span>
+</div>
+</div>
+<!-- Split Row for NIF and City -->
+<div class="flex flex-col sm:flex-row gap-5">
+<!-- Field: NIF / CIF -->
+<div class="flex flex-col gap-2 flex-1">
+<label class="text-sm font-medium text-[#161313] dark:text-gray-200">
+                                NIF / CIF
+                            </label>
+<div class="relative">
+<input class="w-full h-14 px-4 rounded-xl border border-sand-border bg-white dark:bg-[#2a2424] dark:border-[#443d3d] dark:text-white text-[#161313] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm" placeholder="A12345678" type="text"/>
+</div>
+</div>
+<!-- Field: City -->
+<div class="flex flex-col gap-2 flex-1">
+<label class="text-sm font-medium text-[#161313] dark:text-gray-200">
+                                Ciudad
+                            </label>
+<div class="relative">
+<input class="w-full h-14 px-4 rounded-xl border border-sand-border bg-white dark:bg-[#2a2424] dark:border-[#443d3d] dark:text-white text-[#161313] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-sm" placeholder="Madrid" type="text"/>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">location_on</span>
+</div>
+</div>
+</div>
+<!-- Actions -->
+<div class="flex items-center justify-between pt-4 mt-2">
+<a class="text-sm font-medium text-[#7c6e6e] hover:text-[#161313] dark:text-gray-400 dark:hover:text-white transition-colors flex items-center gap-1 group" href="#">
+<span class="material-symbols-outlined text-lg group-hover:-translate-x-1 transition-transform">arrow_back</span>
+                            Volver
+                        </a>
+<button class="bg-primary hover:bg-[#a66a6a] text-white px-8 h-12 rounded-xl font-medium shadow-lg shadow-primary/20 transition-all hover:shadow-primary/40 flex items-center gap-2">
+                            Completar Registro
+                            <span class="material-symbols-outlined text-lg">check_circle</span>
+</button>
+</div>
+</form>
+</div>
+</div>
+</div>
+</body></html>

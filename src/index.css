@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tus colores de fondo por defecto */
+body {
+  background-color: #F1EFE7;
+  color: #5B5F62;
+}
