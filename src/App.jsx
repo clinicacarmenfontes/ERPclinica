@@ -59,4 +59,4 @@ function App() {
 
 export default App;
 
-// Forzando actualización de Vercel
+// Forzando despliegue Vercel v2
