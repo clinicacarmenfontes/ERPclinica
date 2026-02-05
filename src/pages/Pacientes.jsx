@@ -218,8 +218,11 @@ export default function Patients() {
                 <input className="bg-white border border-border/50 pl-10 pr-4 py-2 rounded-xl text-sm focus:outline-none focus:border-primary/50 w-64 transition-all shadow-sm" placeholder="Buscar..." type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
             <Notifications />
-            <div className="size-10 rounded-full bg-cover bg-center border-2 border-white shadow-sm" style={{backgroundImage: "url('https://images.unsplash.com/photo-1559839734-2b71ea197ec2?q=80&w=2070&auto=format&fit=crop')"}}></div>
-          </div>
+            <img 
+            src="/icon.svg" 
+            alt="Perfil" 
+          className="size-10 rounded-full border-2 border-white shadow-md bg-white p-1 object-contain"
+/>
         </header>
 
         <div className="flex-1 p-8 max-w-[1400px] mx-auto w-full flex flex-col gap-6 h-full overflow-hidden">
