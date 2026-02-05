@@ -15,9 +15,9 @@ export default function Settings() {
   const [message, setMessage] = useState(null);
   
   // ESTADO PARA EDICIÓN (MODAL)
-  const [editingItem, setEditingItem] = useState(null); // El objeto que se está editando
-  const [editingTable, setEditingTable] = useState(null); // La tabla a la que pertenece
-  const [editingFields, setEditingFields] = useState([]); // Los campos editables (configuración)
+  const [editingItem, setEditingItem] = useState(null); 
+  const [editingTable, setEditingTable] = useState(null); 
+  const [editingFields, setEditingFields] = useState([]); 
 
   const [lastUploads, setLastUploads] = useState(() => {
     const saved = localStorage.getItem('lastUploads');
@@ -64,7 +64,6 @@ export default function Settings() {
 
   // --- LÓGICA DE EDICIÓN ---
   const handleEditClick = (item, tableName, cols, labels) => {
-      // Preparamos la configuración del modal
       const fields = cols.map((key, index) => ({
           key: key,
           label: labels[index],
@@ -73,7 +72,7 @@ export default function Settings() {
       
       setEditingTable(tableName);
       setEditingFields(fields);
-      setEditingItem(item); // Abre el modal
+      setEditingItem(item); 
   };
 
   const handleSaveEdit = async (formData) => {
@@ -88,8 +87,8 @@ export default function Settings() {
           if (error) throw error;
 
           setMessage({ type: 'success', text: 'Registro actualizado correctamente' });
-          setEditingItem(null); // Cerrar modal
-          refreshAllTables(); // Recargar datos visuales
+          setEditingItem(null); 
+          refreshAllTables(); 
       } catch (err) {
           console.error(err);
           setMessage({ type: 'error', text: `Error al actualizar: ${err.message}` });
@@ -97,8 +96,6 @@ export default function Settings() {
           setLoading(false);
       }
   };
-
-  // --- FIN LÓGICA EDICIÓN ---
 
   const handleDeleteAll = async (tableName) => {
     if (!window.confirm(`⛔ ¡PELIGRO!\n\nSe borrarán TODOS los datos de la tabla '${tableName}'.\n¿Estás seguro de que quieres continuar?`)) return;
@@ -190,6 +187,7 @@ export default function Settings() {
       });
   };
 
+  // --- FUNCIÓN PRINCIPAL DE CARGA MODIFICADA ---
   const handleFileUpload = async (e, type, extraParam = null) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -197,6 +195,7 @@ export default function Settings() {
     setMessage(null);
 
     try {
+      // 1. LECTURA DEL ARCHIVO
       let rawRows = [];
       if (file.name.toLowerCase().endsWith('.csv')) {
         const textContent = await readFileAsText(file);
@@ -219,27 +218,28 @@ export default function Settings() {
         let n = {}; Object.keys(row).forEach(k => n[normalizeKey(k)] = row[k]); return n;
       });
 
-      let tableName = ''; let formattedData = []; let conflictTarget = 'id';
+      let tableName = ''; let formattedData = []; 
       let warningCount = 0;
 
+      // 2. FORMATEO DE DATOS SEGÚN TIPO
       if (type === 'treatment_catalog') {
-        tableName = 'treatment_catalog'; conflictTarget = 'name';
+        tableName = 'treatment_catalog'; 
         formattedData = data.map(r => ({ name: safeString(r.nombre), account_code: safeString(r.asientocontable || r.cuentafinanciera), specialty: r.especialidad, price: parseAmount(r.precio) }));
       } 
       else if (type === 'expense_catalog') {
-        tableName = 'expense_catalog'; conflictTarget = 'name';
+        tableName = 'expense_catalog'; 
         formattedData = data.map(r => ({ name: safeString(r.nombre), account_code: safeString(r.asientocontable), expense_type: r.fijovariable }));
       }
       else if (type === 'accounting_map') {
-        tableName = 'accounting_map'; conflictTarget = 'concept_name';
+        tableName = 'accounting_map'; 
         formattedData = data.map(r => ({ concept_name: safeString(r.nombre || r.concepto), account_code: safeString(r.asientocontable), category_type: extraParam, parent_group: r.tiposuperior || '' }));
       }
       else if (type === 'treasury') {
-        tableName = 'treasury_accounts'; conflictTarget = 'account_code';
+        tableName = 'treasury_accounts'; 
         formattedData = data.map(r => ({ internal_name: safeString(r.nombre), account_code: safeString(r.asientocontable), description: r.explicacion || '' }));
       }
       else if (type === 'amortization') {
-        tableName = 'assets_amortization'; conflictTarget = 'asset_name';
+        tableName = 'assets_amortization'; 
         formattedData = data.map(r => ({
             asset_name: safeString(r.nombre || r.activo),
             asset_account: safeString(r.cuentaactivo || r.cuenta),
@@ -250,7 +250,7 @@ export default function Settings() {
         }));
       }
       else if (type === 'opening') {
-        tableName = 'opening_balances'; conflictTarget = 'account_code';
+        tableName = 'opening_balances'; 
         formattedData = data.map(r => ({
           fiscal_year: 2026, account_code: safeString(r.cuentacontable), account_name: safeString(r.nombre),
           debit_balance: parseAmount(r.saldodebeinicial || r.debe), 
@@ -259,28 +259,23 @@ export default function Settings() {
         }));
       }
       
+      // --- LÓGICA DE MOVIMIENTOS (INGRESOS Y GASTOS) ---
       else if (type === 'import_ingresos') {
-        tableName = 'incomes'; conflictTarget = 'invoice_number';
+        tableName = 'incomes'; 
         formattedData = data.map(r => {
           const nif = safeString(r.docident || r.nif || r.dni);
           const cp = safeString(r.cpostal || r.codigopostal || r.cp);
           if (!nif || !cp) warningCount++;
-
           const total = parseAmount(r.cantidad || r.totalfactura);
           const quota = parseAmount(r.impuestos);
-          const base = total - quota;
-
-          let vatPercentage = 0;
-          if (base > 0 && quota > 0) vatPercentage = Math.round((quota / base) * 100);
-
           return { 
             invoice_number: safeString(r.numfactura || r.factura || r.num), 
             issue_date: r.fechaemision || r.fecha, 
             client_name: safeString(r.nombrecliente, 'Cliente General'), 
             total_amount: total,
             vat_quota: quota,
-            tax_base: base,
-            vat_type: vatPercentage,
+            tax_base: total - quota,
+            vat_type: (total - quota > 0 && quota > 0) ? Math.round((quota / (total-quota)) * 100) : 0,
             client_nif: nif,
             postal_code: cp,
             payment_method: safeString(r.formadepago || r.formapago)
@@ -289,14 +284,11 @@ export default function Settings() {
       }
       
       else if (type === 'import_gastos') {
-        tableName = 'expenses'; conflictTarget = undefined; 
+        tableName = 'expenses'; 
         formattedData = data.map(r => {
           const total = parseAmount(r.totalpagar || r.total);
           const taxEuro = parseAmount(r.impuestos); 
           const taxTypeStr = safeString(r.tipoimpuesto || r.tipo_impuesto); 
-
-          const base = total - taxEuro;
-
           let vatPercentage = 0;
           const percentageMatch = taxTypeStr.match(/(\d+([.,]\d+)?)/); 
           if (percentageMatch) vatPercentage = parseFloat(percentageMatch[0].replace(',', '.'));
@@ -307,7 +299,7 @@ export default function Settings() {
             provider_name: safeString(r.nombreproveedor, 'Proveedor Varios'), 
             total_payment: total,
             vat_quota: taxEuro,     
-            tax_base: base,         
+            tax_base: total - taxEuro,        
             vat_type: vatPercentage, 
             tax_description: taxTypeStr, 
             provider_cif: safeString(r.cif || r.nif),
@@ -317,6 +309,7 @@ export default function Settings() {
         });
       }
 
+      // --- LÓGICA DE SALDOS ---
       else if (type === 'patient_balances') {
         tableName = 'patient_period_balances'; 
         formattedData = data.map(r => ({
@@ -330,6 +323,7 @@ export default function Settings() {
         }));
       }
 
+      // 3. LIMPIEZA DE FILAS VACÍAS Y DUPLICADOS EN EXCEL
       formattedData = formattedData.filter(item => {
           if (type.includes('catalog')) return item.name;
           if (type === 'accounting_map') return item.concept_name;
@@ -338,39 +332,118 @@ export default function Settings() {
           if (type === 'patient_balances') return item.document_id;
           return Object.values(item).some(val => val !== '');
       });
-
-      const initialCount = formattedData.length;
       formattedData = removeDuplicates(formattedData, type);
-      const dedupCount = initialCount - formattedData.length;
 
-      if (formattedData.length > 0) {
-        let upsertConfig = { onConflict: conflictTarget };
-        if (type === 'patient_balances') upsertConfig = { onConflict: 'document_id, period_date, balance_type' };
-        if (type === 'import_gastos') upsertConfig = { onConflict: 'provider_invoice_number, provider_name' }; 
+      if (formattedData.length === 0) {
+        throw new Error("El archivo está vacío o los datos no son válidos.");
+      }
+
+      // 4. EJECUCIÓN DE CARGA SEGÚN LÓGICA ESPECÍFICA (AQUÍ ESTÁ EL CAMBIO IMPORTANTE)
+
+      // CASO A: SALDOS DE PACIENTES (FOTO DEL DÍA)
+      // Borramos lo que había de ese tipo y metemos lo nuevo.
+      if (type === 'patient_balances') {
+        // Primero borramos los saldos de ese tipo (Deudor o Acreedor)
+        const { error: deleteError } = await supabase
+            .from(tableName)
+            .delete()
+            .eq('balance_type', extraParam); // Solo borra 'Deudor' o 'Acreedor' según corresponda
+        
+        if (deleteError) throw deleteError;
+
+        // Ahora insertamos los nuevos (Foto limpia)
+        const { error: insertError } = await supabase.from(tableName).insert(formattedData);
+        if (insertError) throw insertError;
+      }
+
+      // CASO B: INGRESOS Y GASTOS (INCREMENTAL CON CONTROL DE INTEGRIDAD)
+      else if (type === 'import_ingresos' || type === 'import_gastos') {
+          
+          // Paso 1: Obtener lo que YA existe en la base de datos para comparar
+          let existingData = [];
+          if (type === 'import_ingresos') {
+             const { data } = await supabase.from('incomes').select('invoice_number, total_amount');
+             existingData = data || [];
+          } else {
+             const { data } = await supabase.from('expenses').select('provider_invoice_number, provider_name, total_payment');
+             existingData = data || [];
+          }
+
+          const recordsToInsert = [];
+          
+          // Paso 2: Comparar línea a línea
+          for (const newItem of formattedData) {
+              let match = null;
+
+              if (type === 'import_ingresos') {
+                  match = existingData.find(e => e.invoice_number === newItem.invoice_number);
+                  if (match) {
+                      // Ya existe. Verificamos integridad (Importes iguales)
+                      if (Math.abs(match.total_amount - newItem.total_amount) > 0.01) {
+                          throw new Error(`CONFLICTO DE INTEGRIDAD: La factura ${newItem.invoice_number} ya existe en el sistema con ${match.total_amount}€, pero el Excel dice ${newItem.total_amount}€. Revisa el archivo.`);
+                      }
+                      // Si coincide, lo ignoramos (ya está cargado)
+                      continue;
+                  }
+              } else { // Gastos
+                  match = existingData.find(e => 
+                      e.provider_invoice_number === newItem.provider_invoice_number && 
+                      e.provider_name === newItem.provider_name
+                  );
+                  if (match) {
+                      if (Math.abs(match.total_payment - newItem.total_payment) > 0.01) {
+                          throw new Error(`CONFLICTO DE INTEGRIDAD: El gasto ${newItem.provider_invoice_number} (${newItem.provider_name}) ya existe con ${match.total_payment}€, pero el Excel dice ${newItem.total_payment}€. Revisa el archivo.`);
+                      }
+                      continue; 
+                  }
+              }
+
+              // Si no existe, lo añadimos a la cola de insertar
+              recordsToInsert.push(newItem);
+          }
+
+          // Paso 3: Insertar solo los nuevos
+          if (recordsToInsert.length > 0) {
+              const { error } = await supabase.from(tableName).insert(recordsToInsert);
+              if (error) throw error;
+          } else {
+              // Si no hay nada nuevo, pero tampoco errores, avisamos
+              setMessage({ type: 'success', text: "✅ No se encontraron registros nuevos. Todos los datos ya estaban cargados correctamente." });
+              setLoading(false);
+              return; // Salimos para no sobrescribir el mensaje de éxito genérico
+          }
+      }
+
+      // CASO C: OTROS (Diccionarios, etc.) - Upsert estándar
+      else {
+        let upsertConfig = { onConflict: 'id' };
+        if (type === 'treatment_catalog' || type === 'expense_catalog') upsertConfig = { onConflict: 'name' };
+        if (type === 'accounting_map') upsertConfig = { onConflict: 'concept_name' };
+        if (type === 'treasury') upsertConfig = { onConflict: 'account_code' };
+        if (type === 'opening') upsertConfig = { onConflict: 'account_code' };
 
         const { error } = await supabase.from(tableName).upsert(formattedData, upsertConfig);
         if (error) throw error;
-        
-        const now = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-        const newStats = { date: now, count: formattedData.length };
-        
-        if (type === 'import_ingresos') setLastUploads(prev => ({...prev, ingresos: newStats}));
-        if (type === 'import_gastos') setLastUploads(prev => ({...prev, gastos: newStats}));
-        if (type === 'patient_balances' && extraParam === 'Deudor') setLastUploads(prev => ({...prev, deudores: newStats}));
-        if (type === 'patient_balances' && extraParam === 'Acreedor') setLastUploads(prev => ({...prev, acreedores: newStats}));
-
-        let msg = `✅ Éxito: ${formattedData.length} registros cargados.`;
-        if (dedupCount > 0) msg += ` (Se eliminaron ${dedupCount} duplicados).`;
-        if (warningCount > 0 && type === 'import_ingresos') msg += ` ${warningCount} sin DNI/CP.`;
-
-        setMessage({ type: 'success', text: msg });
-        refreshAllTables();
-      } else {
-        setMessage({ type: 'error', text: "⚠️ Archivo vacío o datos no válidos." });
       }
+      
+      // 5. ACTUALIZAR ESTADÍSTICAS Y MENSAJES
+      const now = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const newStats = { date: now, count: formattedData.length };
+      
+      if (type === 'import_ingresos') setLastUploads(prev => ({...prev, ingresos: newStats}));
+      if (type === 'import_gastos') setLastUploads(prev => ({...prev, gastos: newStats}));
+      if (type === 'patient_balances' && extraParam === 'Deudor') setLastUploads(prev => ({...prev, deudores: newStats}));
+      if (type === 'patient_balances' && extraParam === 'Acreedor') setLastUploads(prev => ({...prev, acreedores: newStats}));
+
+      let msg = `✅ Carga completada con éxito.`;
+      if (warningCount > 0 && type === 'import_ingresos') msg += ` (Nota: ${warningCount} registros no tenían DNI/CP).`;
+
+      setMessage({ type: 'success', text: msg });
+      refreshAllTables();
+      
     } catch (err) { 
       console.error(err);
-      setMessage({ type: 'error', text: `ERROR TÉCNICO: ${err.message}` }); 
+      setMessage({ type: 'error', text: `ERROR: ${err.message}` }); 
     } finally { 
       setLoading(false); 
       e.target.value = null; 
@@ -492,7 +565,7 @@ function Section({ title, tableName, data, cols, labels, onUpload, onDownload, o
             columns={cols.map((c, i) => ({ key: c, label: labels[i] }))} 
             onDeleteRow={(id) => onDeleteRow(tableName, id)} 
             hasData={hasData}
-            onEdit={(item) => onEdit(item, tableName, cols, labels)} // Pasamos la función de editar
+            onEdit={(item) => onEdit(item, tableName, cols, labels)} 
         />
       </div>
     </div>
@@ -512,7 +585,6 @@ function EditableTable({ data, columns, onDeleteRow, hasData, onEdit }) {
             <tr key={item.id} className="hover:bg-[#FDFCF8] transition-colors group">
               {columns.map(c => <td key={c.key} className="p-4 text-gray-700">{item[c.key]}</td>)}
               <td className="p-4 text-right sticky right-0 bg-white group-hover:bg-[#FDFCF8] flex justify-end gap-2">
-                {/* BOTÓN EDITAR NUEVO */}
                 <button onClick={() => onEdit(item)} className="text-blue-300 hover:text-blue-500 transition-colors p-1 bg-blue-50 hover:bg-blue-100 rounded-md">
                     <Pencil size={14}/>
                 </button>
@@ -528,7 +600,6 @@ function EditableTable({ data, columns, onDeleteRow, hasData, onEdit }) {
   );
 }
 
-// NUEVO COMPONENTE: MODAL DE EDICIÓN
 function EditModal({ item, fields, onClose, onSave }) {
     const [formData, setFormData] = useState(item);
 
