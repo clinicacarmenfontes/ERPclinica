@@ -7,7 +7,7 @@ import autoTable from "jspdf-autotable";
 import { 
   TrendingUp, Download, ChevronLeft, ChevronRight, ChevronDown,
   Calendar, Wallet, PieChart, Activity, ArrowUpRight, Scale, 
-  BadgeEuro, CircleDollarSign, Loader2, AlertCircle, FileText, Landmark, Info
+  BadgeEuro, CircleDollarSign, Loader2, AlertCircle, FileText, Landmark, Info, LayoutGrid
 } from 'lucide-react';
 
 // --- UTILIDADES ---
@@ -41,10 +41,20 @@ export default function Reports() {
   const [patientBalances, setPatientBalances] = useState([]); 
   const [expenseCatalog, setExpenseCatalog] = useState({});
   
-  const [period, setPeriod] = useState({ year: new Date().getFullYear(), month: 'all' });
+  // ESTADO DEL PERIODO (Ahora incluye quarter)
+  const [period, setPeriod] = useState({ year: new Date().getFullYear(), month: 'all', quarter: 'all' });
+  
+  // ESTADOS DE INTERFAZ
   const [isMonthSelectorOpen, setIsMonthSelectorOpen] = useState(false);
+  const [isQuarterSelectorOpen, setIsQuarterSelectorOpen] = useState(false);
   
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  const quarters = [
+      { id: 1, label: '1º Trimestre', months: [0, 1, 2], limitMonth: 2 },
+      { id: 2, label: '2º Trimestre', months: [3, 4, 5], limitMonth: 5 },
+      { id: 3, label: '3º Trimestre', months: [6, 7, 8], limitMonth: 8 },
+      { id: 4, label: '4º Trimestre', months: [9, 10, 11], limitMonth: 11 }
+  ];
 
   useEffect(() => {
     let mounted = true;
@@ -110,16 +120,28 @@ export default function Reports() {
             else if (acc.startsWith('4') || acc.startsWith('5')) iniLiabilities += (val * -1);
         });
 
-        // 2. MOVIMIENTOS AÑO
+        // 2. FUNCIÓN DE FILTRADO INTELIGENTE (Mes o Trimestre)
         const filterFn = (item) => {
-            if (period.month === 'all') return true;
             if (!item.issue_date) return false;
-            return new Date(item.issue_date).getMonth() === period.month;
+            const m = new Date(item.issue_date).getMonth();
+
+            // Prioridad 1: Filtro por Mes
+            if (period.month !== 'all') return m === period.month;
+
+            // Prioridad 2: Filtro por Trimestre
+            if (period.quarter !== 'all') {
+                const targetQ = quarters.find(q => q.id === period.quarter);
+                if (targetQ) return targetQ.months.includes(m);
+            }
+
+            // Defecto: Todo el año
+            return true;
         };
+
         const pIncomes = incomes.filter(filterFn);
         const pExpenses = expenses.filter(filterFn);
 
-        // P&L
+        // P&L CÁLCULO
         data.pnl.revenue = pIncomes.reduce((s, i) => s + toNum(i.tax_base), 0);
         let currentAmortization = 0;
         let currentInvestments = 0;
@@ -141,19 +163,24 @@ export default function Reports() {
         data.pnl.ebitda = data.pnl.grossMargin - (data.pnl.personnel + data.pnl.services);
         data.pnl.ebit = data.pnl.ebitda - data.pnl.amortization;
 
-        // 3. SALDOS DE PACIENTES
+        // 3. SALDOS DE PACIENTES (Foto al final del periodo seleccionado)
         let targetBalances = [];
         if (patientBalances.length > 0) {
             const availableDates = [...new Set(patientBalances.map(p => p.period_date))].sort();
             if (availableDates.length > 0) {
-                let targetDate = null;
-                if (period.month === 'all') {
-                    targetDate = availableDates[availableDates.length - 1];
-                } else {
-                    const targetMonth = period.month;
-                    const validDates = availableDates.filter(d => new Date(d).getMonth() <= targetMonth);
-                    targetDate = validDates.length > 0 ? validDates[validDates.length - 1] : null;
+                let maxMonthIndex = 11; // Por defecto dic (todo el año)
+                
+                if (period.month !== 'all') {
+                    maxMonthIndex = period.month;
+                } else if (period.quarter !== 'all') {
+                    const targetQ = quarters.find(q => q.id === period.quarter);
+                    if (targetQ) maxMonthIndex = targetQ.limitMonth;
                 }
+
+                // Buscamos la fecha más cercana al final del periodo seleccionado
+                const validDates = availableDates.filter(d => new Date(d).getMonth() <= maxMonthIndex);
+                const targetDate = validDates.length > 0 ? validDates[validDates.length - 1] : null;
+                
                 if (targetDate) targetBalances = patientBalances.filter(p => p.period_date === targetDate);
             }
         }
@@ -166,8 +193,21 @@ export default function Reports() {
         // A) ACTIVO
         data.balance.nonCurrentAssets = iniNCAssets + currentInvestments - currentAmortization;
         
-        const totalCashIn = incomes.reduce((s, i) => s + toNum(i.total_amount), 0);
-        const totalCashOut = expenses.reduce((s, e) => s + toNum(e.total_payment), 0);
+        // Tesorería se calcula sobre el acumulado de movimientos hasta la fecha de corte
+        // Nota: incomes y expenses ya están filtrados por filterFn, lo cual es correcto para P&L
+        // Pero para Tesorería (Balance), necesitamos el acumulado DESDE EL INICIO DEL AÑO hasta el fin del periodo.
+        
+        // Calculamos fecha límite para acumulados de balance
+        let limitMonth = 11;
+        if (period.month !== 'all') limitMonth = period.month;
+        else if (period.quarter !== 'all') limitMonth = quarters.find(q => q.id === period.quarter).limitMonth;
+
+        const balanceIncomes = incomes.filter(i => i.issue_date && new Date(i.issue_date).getMonth() <= limitMonth);
+        const balanceExpenses = expenses.filter(e => e.issue_date && new Date(e.issue_date).getMonth() <= limitMonth);
+
+        const totalCashIn = balanceIncomes.reduce((s, i) => s + toNum(i.total_amount), 0);
+        const totalCashOut = balanceExpenses.reduce((s, e) => s + toNum(e.total_payment), 0);
+        
         data.balance.treasury = iniTreasury + (totalCashIn - totalCashOut);
         data.balance.debtors = totalPatientDebtors; 
 
@@ -184,11 +224,11 @@ export default function Reports() {
         const totalEquityForced = totalAssets - totalLiabilities;
 
         data.balance.equityCapital = iniEquity; 
-        data.balance.equityResult = data.pnl.ebit; 
+        data.balance.equityResult = data.pnl.ebit; // Esto es el resultado del periodo seleccionado
         data.balance.equityGap = totalEquityForced - (iniEquity + data.pnl.ebit);
         data.balance.equity = totalEquityForced; 
 
-        // CASHFLOW
+        // CASHFLOW (Del periodo seleccionado)
         data.cashflow.in = pIncomes.reduce((s, i) => s + toNum(i.total_amount), 0);
         data.cashflow.out = pExpenses.reduce((s, e) => s + toNum(e.total_payment), 0);
         data.cashflow.net = data.cashflow.in - data.cashflow.out;
@@ -208,10 +248,13 @@ export default function Reports() {
   // --- HANDLER PDF DETALLADO ---
   const handleExportPDF = (type) => {
     const doc = new jsPDF();
-    
+    let periodText = `Ejercicio: ${period.year}`;
+    if (period.quarter !== 'all') periodText += ` - ${quarters.find(q=>q.id===period.quarter).label}`;
+    if (period.month !== 'all') periodText += ` - ${monthNames[period.month]}`;
+
     if (type === 'pnl') {
         doc.text("CUENTA DE RESULTADOS (P&L)", 14, 20);
-        doc.setFontSize(10); doc.text(`Ejercicio: ${period.year}`, 14, 26);
+        doc.setFontSize(10); doc.text(periodText, 14, 26);
         autoTable(doc, {
             startY: 35, 
             head: [['CONCEPTO', 'IMPORTE', '%']],
@@ -230,7 +273,7 @@ export default function Reports() {
     } else {
         // PDF BALANCE DETALLADO
         doc.text("BALANCE DE SITUACIÓN", 14, 20);
-        doc.setFontSize(10); doc.text(`Ejercicio: ${period.year} | Foto a fecha cierre`, 14, 26);
+        doc.setFontSize(10); doc.text(`${periodText} | Foto a fecha cierre`, 14, 26);
 
         const { nonCurrentAssets, currentAssets, treasury, debtors, equity, equityCapital, equityResult, currentLiabilities, providers, creditors } = reportData.balance;
         const totalActivo = nonCurrentAssets + currentAssets;
@@ -269,9 +312,25 @@ export default function Reports() {
     doc.save(`${type}_${period.year}.pdf`);
   };
 
+  // --- CONTROLADORES DE FECHA ---
   const changeYear = (d) => setPeriod(p => ({ ...p, year: p.year + d }));
-  const selectMonth = (m) => { setPeriod(p => ({ ...p, month: m })); setIsMonthSelectorOpen(false); };
+  
+  // Selección de mes (limpia trimestre)
+  const selectMonth = (m) => { 
+      setPeriod(p => ({ ...p, month: m, quarter: 'all' })); 
+      setIsMonthSelectorOpen(false); 
+  };
+
+  // Selección de trimestre (limpia mes)
+  const selectQuarter = (qId) => {
+      setPeriod(p => ({ ...p, quarter: qId, month: 'all' }));
+      setIsQuarterSelectorOpen(false);
+  };
+
   const availableMonths = useMemo(() => { const s = new Set(); [...incomes, ...expenses].forEach(i => { if(i.issue_date) s.add(new Date(i.issue_date).getMonth()); }); return s; }, [incomes, expenses]);
+
+  // Texto del selector de trimestre
+  const currentQuarterLabel = period.quarter === 'all' ? 'Trimestres' : quarters.find(q => q.id === period.quarter)?.label;
 
   return (
     <div className="flex h-screen overflow-hidden bg-background font-sans text-[#161313]">
@@ -297,9 +356,49 @@ export default function Reports() {
             </div>
             <div className="flex gap-3 items-center">
                 <div className="flex items-center gap-2 bg-white p-1 rounded-xl shadow-sm border border-border/10 relative">
-                    <div className="flex items-center border-r border-border/10 pr-2"><button onClick={() => changeYear(-1)} className="p-2 hover:bg-gray-100 rounded-lg text-text/60"><ChevronLeft size={16}/></button><span className="font-bold text-text px-2">{period.year}</span><button onClick={() => changeYear(1)} className="p-2 hover:bg-gray-100 rounded-lg text-text/60"><ChevronRight size={16}/></button></div>
-                    <div className="relative"><button onClick={() => setIsMonthSelectorOpen(!isMonthSelectorOpen)} className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50 rounded-lg transition-colors text-sm font-medium text-text min-w-[140px] justify-between"><span className="flex items-center gap-2"><Calendar size={16} className="text-primary"/> {period.month === 'all' ? 'Todo el Año' : monthNames[period.month]}</span><ChevronDown size={14} className="text-text/40"/></button>
-                        {isMonthSelectorOpen && (<div className="absolute top-full right-0 mt-2 w-64 bg-white border border-border/10 shadow-xl rounded-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-200"><button onClick={() => selectMonth('all')} className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-2 font-bold ${period.month === 'all' ? 'bg-primary/10 text-primary' : 'hover:bg-gray-50 text-text'}`}>Todo el Año</button><div className="grid grid-cols-3 gap-1">{monthNames.map((m, i) => (<button key={i} onClick={() => availableMonths.has(i) && selectMonth(i)} disabled={!availableMonths.has(i)} className={`px-2 py-2 rounded-md text-xs text-center transition-colors ${period.month === i ? 'bg-primary text-white shadow-md' : availableMonths.has(i) ? 'hover:bg-gray-50 text-text/70' : 'text-gray-300 cursor-not-allowed'}`}>{m.substring(0,3)}</button>))}</div></div>)}
+                    {/* AÑO */}
+                    <div className="flex items-center border-r border-border/10 pr-2">
+                        <button onClick={() => changeYear(-1)} className="p-2 hover:bg-gray-100 rounded-lg text-text/60"><ChevronLeft size={16}/></button>
+                        <span className="font-bold text-text px-2">{period.year}</span>
+                        <button onClick={() => changeYear(1)} className="p-2 hover:bg-gray-100 rounded-lg text-text/60"><ChevronRight size={16}/></button>
+                    </div>
+
+                    {/* SELECTOR TRIMESTRES (NUEVO) */}
+                    <div className="relative border-r border-border/10 pr-2 mr-2">
+                        <button onClick={() => setIsQuarterSelectorOpen(!isQuarterSelectorOpen)} className={`flex items-center gap-2 px-3 py-2 hover:bg-gray-50 rounded-lg transition-colors text-sm font-medium min-w-[130px] justify-between ${period.quarter !== 'all' ? 'text-primary bg-primary/5' : 'text-text'}`}>
+                            <span className="flex items-center gap-2"><LayoutGrid size={16} className={period.quarter !== 'all' ? "text-primary" : "text-text/40"}/> {currentQuarterLabel}</span>
+                            <ChevronDown size={14} className="text-text/40"/>
+                        </button>
+                        {isQuarterSelectorOpen && (
+                            <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-border/10 shadow-xl rounded-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-200">
+                                <button onClick={() => selectQuarter('all')} className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 font-bold ${period.quarter === 'all' ? 'bg-primary/10 text-primary' : 'hover:bg-gray-50 text-text'}`}>Todo el Año</button>
+                                {quarters.map((q) => (
+                                    <button key={q.id} onClick={() => selectQuarter(q.id)} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${period.quarter === q.id ? 'bg-primary text-white shadow-md' : 'hover:bg-gray-50 text-text/70'}`}>
+                                        {q.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* SELECTOR MESES */}
+                    <div className="relative">
+                        <button onClick={() => setIsMonthSelectorOpen(!isMonthSelectorOpen)} className={`flex items-center gap-2 px-4 py-2 hover:bg-gray-50 rounded-lg transition-colors text-sm font-medium min-w-[140px] justify-between ${period.month !== 'all' ? 'text-primary bg-primary/5' : 'text-text'}`}>
+                            <span className="flex items-center gap-2"><Calendar size={16} className={period.month !== 'all' ? "text-primary" : "text-text/40"}/> {period.month === 'all' ? 'Meses' : monthNames[period.month]}</span>
+                            <ChevronDown size={14} className="text-text/40"/>
+                        </button>
+                        {isMonthSelectorOpen && (
+                            <div className="absolute top-full right-0 mt-2 w-64 bg-white border border-border/10 shadow-xl rounded-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-200">
+                                <button onClick={() => selectMonth('all')} className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-2 font-bold ${period.month === 'all' ? 'bg-primary/10 text-primary' : 'hover:bg-gray-50 text-text'}`}>Todos los meses</button>
+                                <div className="grid grid-cols-3 gap-1">
+                                    {monthNames.map((m, i) => (
+                                        <button key={i} onClick={() => availableMonths.has(i) && selectMonth(i)} disabled={!availableMonths.has(i)} className={`px-2 py-2 rounded-md text-xs text-center transition-colors ${period.month === i ? 'bg-primary text-white shadow-md' : availableMonths.has(i) ? 'hover:bg-gray-50 text-text/70' : 'text-gray-300 cursor-not-allowed'}`}>
+                                            {m.substring(0,3)}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <button onClick={() => handleExportPDF(activeView)} className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"><Download size={18} /><span>PDF Detallado</span></button>
@@ -308,19 +407,19 @@ export default function Reports() {
 
           {loading ? <div className="h-96 flex items-center justify-center text-primary"><Loader2 size={40} className="animate-spin"/></div> : (
              <>
-                {activeView === 'pnl' && <PnLView data={reportData} periodLabel={period.month === 'all' ? `Todo el año ${period.year}` : `${monthNames[period.month]} ${period.year}`} />}
+                {activeView === 'pnl' && <PnLView data={reportData} periodLabel={period.month === 'all' ? (period.quarter !== 'all' ? `${quarters.find(q=>q.id===period.quarter).label} ${period.year}` : `Todo el año ${period.year}`) : `${monthNames[period.month]} ${period.year}`} />}
                 {activeView === 'balance' && <BalanceView data={reportData.balance} />}
                 {activeView === 'cashflow' && <CashFlowView data={reportData} />}
              </>
           )}
         </div>
       </main>
-      {isMonthSelectorOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMonthSelectorOpen(false)}></div>}
+      {(isMonthSelectorOpen || isQuarterSelectorOpen) && <div className="fixed inset-0 z-40" onClick={() => { setIsMonthSelectorOpen(false); setIsQuarterSelectorOpen(false); }}></div>}
     </div>
   );
 }
 
-// --- VISTAS ---
+// --- VISTAS (Sin cambios lógicos, solo visualización) ---
 function PnLView({ data, periodLabel }) {
   const { revenue, cogs, grossMargin, personnel, services, ebitda, amortization, ebit } = data.pnl;
   return (
@@ -332,7 +431,7 @@ function PnLView({ data, periodLabel }) {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-3 bg-white rounded-3xl p-8 shadow-sm border border-border/10">
-          <div className="flex items-center justify-between mb-8"><h3 className="text-xl font-bold text-text">Evolución P&L</h3><div className="flex gap-4"><span className="flex items-center gap-2 text-xs font-bold"><span className="size-2 bg-secondary rounded-full"></span>Ingresos</span><span className="flex items-center gap-2 text-xs font-bold"><span className="size-2 bg-primary rounded-full"></span>Gastos</span></div></div>
+          <div className="flex items-center justify-between mb-8"><h3 className="text-xl font-bold text-text">Evolución P&L ({periodLabel})</h3><div className="flex gap-4"><span className="flex items-center gap-2 text-xs font-bold"><span className="size-2 bg-secondary rounded-full"></span>Ingresos</span><span className="flex items-center gap-2 text-xs font-bold"><span className="size-2 bg-primary rounded-full"></span>Gastos</span></div></div>
           <div className="w-full h-[280px] flex items-end justify-between gap-2 px-2 border-b border-border/10 pb-4 relative">
               {data.graph.map((m, i) => { const maxVal = Math.max(...data.graph.map(d => Math.max(d.income, d.expense))); const max = maxVal > 0 ? maxVal : 1; return <Bar key={i} month={m.month} income={`${(m.income/max)*100}%`} expense={`${(m.expense/max)*100}%`} incomeVal={currency(m.income)} expenseVal={currency(m.expense)} color1="bg-secondary" color2="bg-primary" /> })}
           </div>
