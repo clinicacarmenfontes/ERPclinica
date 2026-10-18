@@ -1,0 +1,139 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-nunito);
+  --font-montserrat: var(--font-montserrat);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-montserrat);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Identidad de marca Clínica Carmen Fontes (ver CLAUDE.md del proyecto web). */
+:root {
+  --background: #FDFBF7;
+  --foreground: #2C2C2A;
+  --card: #FFFFFF;
+  --card-foreground: #2C2C2A;
+  --popover: #FFFFFF;
+  --popover-foreground: #2C2C2A;
+  --primary: #B87C7C;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F1EFE7;
+  --secondary-foreground: #2C2C2A;
+  --muted: #EFE7DA;
+  --muted-foreground: #6B6763;
+  --accent: #D4B2A7;
+  --accent-foreground: #2C2C2A;
+  --destructive: #C0392B;
+  /* Estados de cobro/pago (ERP): Pagado · Pendiente · Atrasado (= destructive) */
+  --success: #4E8A6A;
+  --warning: #B7862F;
+  --border: #E5DDD0;
+  --input: #E5DDD0;
+  --ring: #B87C7C;
+  --chart-1: #B87C7C;
+  --chart-2: #7C93B8;
+  --chart-3: #D1B7A1;
+  --chart-4: #6FA88A;
+  --chart-5: #D4B2A7;
+  --radius: 0.625rem;
+  --sidebar: #2C2C2A;
+  --sidebar-foreground: #FDFBF7;
+  --sidebar-primary: #B87C7C;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #3A3A37;
+  --sidebar-accent-foreground: #FDFBF7;
+  --sidebar-border: #45453F;
+  --sidebar-ring: #B87C7C;
+}
+
+.dark {
+  --background: #201F1D;
+  --foreground: #FDFBF7;
+  --card: #2A2926;
+  --card-foreground: #FDFBF7;
+  --popover: #2A2926;
+  --popover-foreground: #FDFBF7;
+  --primary: #C99191;
+  --primary-foreground: #201F1D;
+  --secondary: #35332F;
+  --secondary-foreground: #FDFBF7;
+  --muted: #35332F;
+  --muted-foreground: #A8A39A;
+  --accent: #D4B2A7;
+  --accent-foreground: #201F1D;
+  --destructive: #E07A6A;
+  --success: #7FC2A0;
+  --warning: #E0B562;
+  --border: #3F3D38;
+  --input: #3F3D38;
+  --ring: #C99191;
+  --chart-1: #C99191;
+  --chart-2: #93A9D4;
+  --chart-3: #D1B7A1;
+  --chart-4: #7FC2A0;
+  --chart-5: #D4B2A7;
+  --sidebar: #171615;
+  --sidebar-foreground: #FDFBF7;
+  --sidebar-primary: #C99191;
+  --sidebar-primary-foreground: #201F1D;
+  --sidebar-accent: #2A2926;
+  --sidebar-accent-foreground: #FDFBF7;
+  --sidebar-border: #3F3D38;
+  --sidebar-ring: #C99191;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
