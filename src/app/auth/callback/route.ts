@@ -3,7 +3,7 @@ import { isAllowedEmail } from "@/lib/auth/allowlist";
 import { saveGraphRefreshToken } from "@/lib/repository/graph";
 import { createClient } from "@/lib/supabase/server";
 
-// Segunda barrera tras el proxy: solo admin@clinicacarmenfontes.com conserva la
+// Segunda barrera tras el proxy: solo las cuentas de allowlist.ts (admin@ e info@) conservan la
 // sesión. Cualquier otra cuenta (aunque sea del dominio) se cierra al momento.
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);

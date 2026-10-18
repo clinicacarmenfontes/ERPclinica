@@ -38,3 +38,14 @@ describe("classifyPath", () => {
     expect(classifyPath("02. 2024/4TRIMESTRE2024/Envio 4Q2024_OK/a.pdf", 2024).quarter).toBe(4);
   });
 });
+
+describe("acceso", () => {
+  it("solo admin@ e info@ (sin distinguir mayúsculas); nadie más del dominio", async () => {
+    const { isAllowedEmail } = await import("@/lib/auth/allowlist");
+    expect(isAllowedEmail("admin@clinicacarmenfontes.com")).toBe(true);
+    expect(isAllowedEmail(" Info@ClinicaCarmenFontes.com ")).toBe(true);
+    expect(isAllowedEmail("recepcion@clinicacarmenfontes.com")).toBe(false);
+    expect(isAllowedEmail("info@clinicacarmenfontes.com.evil.com")).toBe(false);
+    expect(isAllowedEmail(null)).toBe(false);
+  });
+});

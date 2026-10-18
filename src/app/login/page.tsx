@@ -14,7 +14,7 @@ const dmSans = DM_Sans({ subsets: ["latin"], weight: ["300", "400", "500"], vari
 
 const ERROR_MESSAGES: Record<string, string> = {
   oauth_failed: "No se ha podido iniciar sesión. Inténtalo de nuevo.",
-  not_allowed: "El ERP contable solo está disponible para la cuenta de administración de la clínica.",
+  not_allowed: "El ERP contable solo está disponible para las cuentas admin@ e info@ de la clínica.",
 };
 
 export default async function LoginPage(props: PageProps<"/login">) {
@@ -70,7 +70,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
           <MicrosoftSignInButton config={{ url: supabaseUrl(), publishableKey: supabasePublishableKey() }} />
 
           <p className="mt-8 text-center text-xs text-[#B07D85]">
-            Acceso exclusivo con la cuenta de administración de Microsoft 365 de la clínica.
+            Acceso exclusivo con las cuentas autorizadas de Microsoft 365 de la clínica.
           </p>
         </div>
       </div>

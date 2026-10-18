@@ -13,7 +13,7 @@ const FORBIDDEN_HTML = `<!doctype html><html lang="es"><head><meta charset="utf-
 main{max-width:380px;border:1px solid #E5DDD0;border-radius:16px;background:#fff;padding:32px;text-align:center}
 h1{font-size:18px;margin:0 0 8px}p{font-size:14px;color:#6B6763;margin:0 0 20px}
 button{background:#B87C7C;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer}</style></head>
-<body><main><h1>Acceso restringido</h1><p>El ERP contable solo está disponible para la cuenta de administración de la clínica.</p>
+<body><main><h1>Acceso restringido</h1><p>El ERP contable solo está disponible para las cuentas admin@ e info@ de la clínica.</p>
 <form method="post" action="/auth/signout"><button type="submit">Cerrar sesión y entrar con otra cuenta</button></form></main></body></html>`;
 
 /**
