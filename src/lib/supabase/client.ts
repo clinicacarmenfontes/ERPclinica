@@ -1,9 +1,6 @@
 import { createBrowserClient } from "@supabase/ssr";
 
-/** Cliente Supabase para Client Components. */
-export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-  );
+/** Cliente Supabase para el navegador (solo login). URL y clave llegan del servidor. */
+export function createClient(config: { url: string; publishableKey: string }) {
+  return createBrowserClient(config.url, config.publishableKey);
 }

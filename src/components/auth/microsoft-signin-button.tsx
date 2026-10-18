@@ -4,12 +4,12 @@ import { useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-export function MicrosoftSignInButton() {
+export function MicrosoftSignInButton({ config }: { config: { url: string; publishableKey: string } }) {
   const [pending, setPending] = useState(false);
 
   async function handleClick() {
     setPending(true);
-    const supabase = createClient();
+    const supabase = createClient(config);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "azure",
       options: {

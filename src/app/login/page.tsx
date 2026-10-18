@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { DM_Sans } from "next/font/google";
 import { AlertCircle } from "lucide-react";
 import { MicrosoftSignInButton } from "@/components/auth/microsoft-signin-button";
+import { supabasePublishableKey, supabaseUrl } from "@/lib/supabase/env";
 
 export const metadata: Metadata = { title: "Iniciar sesión | ERP Clínica Carmen Fontes" };
 
@@ -66,7 +67,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
             </div>
           )}
 
-          <MicrosoftSignInButton />
+          <MicrosoftSignInButton config={{ url: supabaseUrl(), publishableKey: supabasePublishableKey() }} />
 
           <p className="mt-8 text-center text-xs text-[#B07D85]">
             Acceso exclusivo con la cuenta de administración de Microsoft 365 de la clínica.

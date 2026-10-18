@@ -38,8 +38,8 @@ Ningún secreto se escribe en el código ni en este documento.
 
 | Variable | Valor |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | la misma URL que el CRM |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | la misma *publishable key* que el CRM |
+| `SUPABASE_URL` | la misma URL que el CRM |
+| `SUPABASE_PUBLISHABLE_KEY` | la misma *publishable key* que el CRM (sin prefijo NEXT_PUBLIC_: el equipo de Vercel obliga a que todas las variables sean secretas) |
 | `SUPABASE_SECRET_KEY` | la clave secreta **`erp`** del paso 1.3 (*Sensitive*) |
 | `ANTHROPIC_API_KEY` | clave de la API de Anthropic (*Sensitive*) |
 

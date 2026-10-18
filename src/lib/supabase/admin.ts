@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
+import { supabaseUrl } from "./env";
 
 /**
  * Cliente con la clave secreta (se salta RLS). En el ERP es la ÚNICA vía de
@@ -10,9 +11,9 @@ import { createClient } from "@supabase/supabase-js";
  * vive en `public`) y nunca lee ni escribe sus tablas.
  */
 export function createAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const url = supabaseUrl();
   const secretKey = process.env.SUPABASE_SECRET_KEY;
-  if (!url || !secretKey) throw new Error("Falta NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SECRET_KEY");
+  if (!url || !secretKey) throw new Error("Falta SUPABASE_SECRET_KEY");
 
   return createClient(url, secretKey, {
     db: { schema: "erp" },
