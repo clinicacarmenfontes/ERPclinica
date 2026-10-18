@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isAllowedEmail } from "@/lib/auth/allowlist";
+import { isAllowedEmail, isGraphAccount } from "@/lib/auth/allowlist";
 import { saveGraphRefreshToken } from "@/lib/repository/graph";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,11 +30,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=not_allowed`);
   }
 
-  // Conexión con OneDrive (repositorio de facturas): Microsoft entrega un
-  // refresh token en cada login de admin@; se guarda cifrado. Si falla, el
-  // login sigue adelante y la pantalla del repositorio avisará.
+  // Conexión con OneDrive (repositorio de facturas): SOLO la sesión de admin@
+  // (a quien info@ comparte la carpeta) se guarda cifrada. La de info@ nunca:
+  // daría acceso a todo su OneDrive. Si falla, el login sigue adelante.
   const refreshToken = exchanged.session?.provider_refresh_token;
-  if (refreshToken && user?.email) {
+  if (refreshToken && user?.email && isGraphAccount(user.email)) {
     try {
       await saveGraphRefreshToken(user.email, refreshToken);
     } catch (e) {

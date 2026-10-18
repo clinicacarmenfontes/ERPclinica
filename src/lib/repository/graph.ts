@@ -1,5 +1,6 @@
 import "server-only";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
+import { GRAPH_ACCOUNT_EMAIL, isGraphAccount } from "@/lib/auth/allowlist";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Acceso a la carpeta de facturas del OneDrive de info@ con el MÍNIMO permiso:
@@ -33,6 +34,7 @@ export type DriveFile = {
 
 /** Guarda (cifrado) el refresh token recibido al iniciar sesión. */
 export async function saveGraphRefreshToken(email: string, refreshToken: string) {
+  if (!isGraphAccount(email)) throw new Error("Solo se guarda la conexión de OneDrive de la cuenta admin@");
   const db = createAdminClient();
   const { error } = await db.from("integration_tokens").upsert({
     provider: "microsoft_graph",
@@ -51,6 +53,7 @@ export async function getGraphAccessToken(): Promise<string> {
     .from("integration_tokens")
     .select("account_email, refresh_token_enc")
     .eq("provider", "microsoft_graph")
+    .eq("account_email", GRAPH_ACCOUNT_EMAIL)
     .maybeSingle<{ account_email: string; refresh_token_enc: string }>();
   if (!row) throw new GraphAuthError();
 

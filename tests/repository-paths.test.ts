@@ -48,4 +48,10 @@ describe("acceso", () => {
     expect(isAllowedEmail("info@clinicacarmenfontes.com.evil.com")).toBe(false);
     expect(isAllowedEmail(null)).toBe(false);
   });
+
+  it("solo la sesión de admin@ sirve como credencial de OneDrive (info@ no)", async () => {
+    const { isGraphAccount } = await import("@/lib/auth/allowlist");
+    expect(isGraphAccount("Admin@clinicacarmenfontes.com")).toBe(true);
+    expect(isGraphAccount("info@clinicacarmenfontes.com")).toBe(false);
+  });
 });
