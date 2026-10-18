@@ -38,7 +38,8 @@ export async function GET(request: NextRequest) {
     try {
       await saveGraphRefreshToken(user.email, refreshToken);
     } catch (e) {
-      console.error("No se pudo guardar la conexión con OneDrive", e);
+      // Solo el motivo: el error completo de Postgres podría incluir la fila (token cifrado).
+      console.error("No se pudo guardar la conexión con OneDrive:", e instanceof Error ? e.message : "error desconocido");
     }
   }
   return NextResponse.redirect(`${origin}/dashboard`);

@@ -38,7 +38,7 @@ export async function saveGraphRefreshToken(email: string, refreshToken: string)
   const db = createAdminClient();
   const { error } = await db.from("integration_tokens").upsert({
     provider: "microsoft_graph",
-    account_email: email,
+    account_email: email.trim().toLowerCase(),
     refresh_token_enc: encryptSecret(refreshToken),
     scopes: GRAPH_SCOPES,
     last_error: null,
