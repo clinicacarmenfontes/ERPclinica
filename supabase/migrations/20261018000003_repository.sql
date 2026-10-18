@@ -12,7 +12,7 @@
 
 -- Tokens de integraciones (refresh token de Microsoft Graph, cifrado en la app
 -- con AES-256-GCM; la BBDD nunca ve el valor en claro).
-create table public.integration_tokens (
+create table erp.integration_tokens (
   provider text primary key check (provider in ('microsoft_graph')),
   account_email text not null,
   refresh_token_enc text not null,
@@ -24,12 +24,12 @@ create table public.integration_tokens (
 );
 
 create trigger integration_tokens_set_updated_at
-  before update on public.integration_tokens
-  for each row execute function public.set_updated_at();
+  before update on erp.integration_tokens
+  for each row execute function erp.set_updated_at();
 
 -- Inventario de la carpeta. Mutable: si mueves un fichero de la raíz a PICADAS
 -- cambia su ruta y su rol (el contenido sigue en source_documents, inmutable).
-create table public.repository_items (
+create table erp.repository_items (
   drive_item_id text primary key,
   drive_id text not null,
   path text not null,                               -- relativa a "01. Facturas"
@@ -51,49 +51,49 @@ create table public.repository_items (
   ctag text,
   -- Intentos de lectura con Claude (informativo: solo se lee cuando lo pides).
   attempts smallint not null default 0,
-  source_document_id uuid references public.source_documents (id),
+  source_document_id uuid references erp.source_documents (id),
   error text,
   seen_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create index repository_items_status_idx on public.repository_items (status);
-create index repository_items_doc_idx on public.repository_items (source_document_id);
+create index repository_items_status_idx on erp.repository_items (status);
+create index repository_items_doc_idx on erp.repository_items (source_document_id);
 
 create trigger repository_items_set_updated_at
-  before update on public.repository_items
-  for each row execute function public.set_updated_at();
+  before update on erp.repository_items
+  for each row execute function erp.set_updated_at();
 
 -- Bandeja: datos de contexto para revisar cada lectura.
-alter table public.document_extractions
+alter table erp.document_extractions
   add column folder_role text,
   add column repository_path text,
   add column match_candidates jsonb not null default '[]'::jsonb,
   add column review_reasons text[] not null default '{}';
 
-create index document_extractions_pending_idx on public.document_extractions (created_at) where status = 'pendiente';
+create index document_extractions_pending_idx on erp.document_extractions (created_at) where status = 'pendiente';
 
 -- Contabilizar desde la bandeja puede chocar con una factura existente sin
 -- que haya una sincronización en marcha.
-alter table public.ingest_conflicts alter column sync_run_id drop not null;
+alter table erp.ingest_conflicts alter column sync_run_id drop not null;
 
-alter table public.ai_runs drop constraint ai_runs_purpose_check;
-alter table public.ai_runs add constraint ai_runs_purpose_check
+alter table erp.ai_runs drop constraint ai_runs_purpose_check;
+alter table erp.ai_runs add constraint ai_runs_purpose_check
   check (purpose in ('extraccion', 'clasificacion', 'recurrencia', 'anomalias', 'conciliacion'));
 
 -- ── Emparejar una lectura con facturas existentes ──────────────────────────
 -- Devuelve hasta 3 candidatas con puntuación 0..1. El nº de factura se compara
 -- solo por letras y cifras ("177/1" = "177-1"), y el emisor no es imprescindible:
 -- en Optimydent hay proveedores grabados con el CIF de la clínica.
-create or replace function public.fn_match_extraction(p jsonb)
+create or replace function erp.fn_match_extraction(p jsonb)
 returns jsonb
 language sql
 stable
 as $$
   with input as (
     select p->>'direction' as direction,
-           public.issuer_key_of(p->>'issuer_tax_id', p->>'issuer_name') as issuer_key,
+           erp.issuer_key_of(p->>'issuer_tax_id', p->>'issuer_name') as issuer_key,
            regexp_replace(upper(coalesce(p->>'invoice_number', '')), '[^A-Z0-9]', '', 'g') as num,
            (p->>'issue_date')::date as d,
            round((p->>'total')::numeric, 2) as total,
@@ -108,7 +108,7 @@ as $$
         + case when i.issuer_key = x.issuer_key then 0.15
                when x.first_word <> '' and upper(i.issuer_name) like x.first_word || '%' then 0.05 else 0 end
       ) as score
-    from public.invoices i, input x
+    from erp.invoices i, input x
     where i.status <> 'anulada'
       and i.direction = x.direction
       and (
@@ -121,27 +121,27 @@ as $$
 $$;
 
 -- Vincular como justificante (no crea nada contable).
-create or replace function public.fn_link_extraction(p_extraction uuid, p_invoice uuid, p_actor text)
+create or replace function erp.fn_link_extraction(p_extraction uuid, p_invoice uuid, p_actor text)
 returns void
 language plpgsql
 as $$
 declare
-  v_e public.document_extractions;
+  v_e erp.document_extractions;
 begin
-  select * into v_e from public.document_extractions where id = p_extraction for update;
+  select * into v_e from erp.document_extractions where id = p_extraction for update;
   if not found then
     raise exception 'Lectura % no encontrada', p_extraction using errcode = 'P0006';
   end if;
   if v_e.status in ('contabilizado', 'descartado') then
     raise exception 'Esta lectura ya está %', v_e.status using errcode = 'P0001';
   end if;
-  update public.document_extractions
+  update erp.document_extractions
      set status = 'vinculado', matched_invoice_id = p_invoice, reviewed_at = now()
    where id = p_extraction;
-  insert into public.invoice_documents (invoice_id, source_document_id, role)
+  insert into erp.invoice_documents (invoice_id, source_document_id, role)
   values (p_invoice, v_e.source_document_id, 'justificante') on conflict do nothing;
   if p_actor <> 'sistema' then
-    insert into public.audit_log (actor, action, entity, entity_id, after)
+    insert into erp.audit_log (actor, action, entity, entity_id, after)
     values (p_actor, 'vincular_justificante', 'document_extractions', p_extraction::text,
             jsonb_build_object('invoice_id', p_invoice));
   end if;
@@ -150,15 +150,15 @@ $$;
 
 -- Contabilizar una lectura = alta por el mismo pipeline antiduplicados.
 -- Si resulta que la factura ya existía, queda vinculada como justificante.
-create or replace function public.fn_book_extraction(p_extraction uuid, p_invoice jsonb, p_actor text)
+create or replace function erp.fn_book_extraction(p_extraction uuid, p_invoice jsonb, p_actor text)
 returns jsonb
 language plpgsql
 as $$
 declare
-  v_e public.document_extractions;
+  v_e erp.document_extractions;
   v_res jsonb;
 begin
-  select * into v_e from public.document_extractions where id = p_extraction for update;
+  select * into v_e from erp.document_extractions where id = p_extraction for update;
   if not found then
     raise exception 'Lectura % no encontrada', p_extraction using errcode = 'P0006';
   end if;
@@ -166,30 +166,30 @@ begin
     raise exception 'Esta lectura ya está %', v_e.status using errcode = 'P0001';
   end if;
 
-  v_res := public.fn_ingest_invoice(p_invoice, null, v_e.source_document_id);
+  v_res := erp.fn_ingest_invoice(p_invoice, null, v_e.source_document_id);
 
   if v_res->>'result' = 'insertada' then
-    update public.document_extractions
+    update erp.document_extractions
        set status = 'contabilizado', created_invoice_id = (v_res->>'invoice_id')::uuid,
            corrected = p_invoice, reviewed_at = now()
      where id = p_extraction;
-    insert into public.invoice_documents (invoice_id, source_document_id, role)
+    insert into erp.invoice_documents (invoice_id, source_document_id, role)
     values ((v_res->>'invoice_id')::uuid, v_e.source_document_id, 'justificante') on conflict do nothing;
   elsif v_res->>'result' in ('sin_cambios', 'actualizada') then
-    update public.document_extractions set corrected = p_invoice where id = p_extraction;
-    perform public.fn_link_extraction(p_extraction, (v_res->>'invoice_id')::uuid, p_actor);
+    update erp.document_extractions set corrected = p_invoice where id = p_extraction;
+    perform erp.fn_link_extraction(p_extraction, (v_res->>'invoice_id')::uuid, p_actor);
   else
     -- conflicto / lápida / trimestre cerrado: la lectura sigue pendiente.
-    update public.document_extractions set corrected = p_invoice where id = p_extraction;
+    update erp.document_extractions set corrected = p_invoice where id = p_extraction;
   end if;
 
-  insert into public.audit_log (actor, action, entity, entity_id, after)
+  insert into erp.audit_log (actor, action, entity, entity_id, after)
   values (p_actor, 'contabilizar_lectura', 'document_extractions', p_extraction::text, v_res);
   return v_res;
 end;
 $$;
 
-create or replace function public.fn_discard_extraction(p_extraction uuid, p_reason text, p_actor text)
+create or replace function erp.fn_discard_extraction(p_extraction uuid, p_reason text, p_actor text)
 returns void
 language plpgsql
 as $$
@@ -197,25 +197,25 @@ begin
   if length(trim(coalesce(p_reason, ''))) < 5 then
     raise exception 'Indica por qué se descarta' using errcode = 'P0005';
   end if;
-  update public.document_extractions
+  update erp.document_extractions
      set status = 'descartado', discard_reason = trim(p_reason), reviewed_at = now()
    where id = p_extraction and status = 'pendiente';
   if not found then
     raise exception 'Solo se descartan lecturas pendientes' using errcode = 'P0001';
   end if;
   if p_actor <> 'sistema' then
-    insert into public.audit_log (actor, action, entity, entity_id, reason)
+    insert into erp.audit_log (actor, action, entity, entity_id, reason)
     values (p_actor, 'descartar_lectura', 'document_extractions', p_extraction::text, trim(p_reason));
   end if;
 end;
 $$;
 
 -- Facturas recibidas de Optimydent que aún no tienen el PDF en OneDrive.
-create view public.v_invoices_without_receipt as
+create view erp.v_invoices_without_receipt as
 select i.id, i.issue_date, i.issuer_name, i.issuer_tax_id, i.invoice_number, i.total
-from public.invoices i
+from erp.invoices i
 where i.direction = 'recibida' and i.status <> 'anulada' and i.source = 'optimydent'
-  and not exists (select 1 from public.invoice_documents d
+  and not exists (select 1 from erp.invoice_documents d
                    where d.invoice_id = i.id and d.role = 'justificante');
 
 do $$
@@ -223,11 +223,18 @@ declare
   t text;
 begin
   foreach t in array array['integration_tokens', 'repository_items'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('revoke all on public.%I from anon, authenticated', t);
+    execute format('alter table erp.%I enable row level security', t);
+    execute format('revoke all on erp.%I from anon, authenticated', t);
   end loop;
 end;
 $$;
-revoke all on public.v_invoices_without_receipt from anon, authenticated;
-revoke execute on all functions in schema public from public, anon, authenticated;
-grant execute on all functions in schema public to service_role;
+revoke all on erp.v_invoices_without_receipt from anon, authenticated;
+-- ── Permisos: el esquema erp solo existe para el servidor del ERP ─────────
+-- Comparte proyecto Supabase con el CRM: los usuarios del CRM (anon /
+-- authenticated) no tienen ni USAGE sobre el esquema, así que no ven nada.
+revoke all on schema erp from public, anon, authenticated;
+grant usage on schema erp to service_role;
+grant all on all tables in schema erp to service_role;
+grant all on all sequences in schema erp to service_role;
+revoke execute on all functions in schema erp from public, anon, authenticated;
+grant execute on all functions in schema erp to service_role;

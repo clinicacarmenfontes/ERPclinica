@@ -1,66 +1,60 @@
 # Puesta en marcha del ERP
 
-Igual que el CRM: GitHub → Vercel, Supabase propio y login con Microsoft.
-Tiempo estimado: 30–40 minutos. Ningún secreto se escribe en el código ni en este documento.
+GitHub → Vercel, con login de Microsoft y el **mismo proyecto Supabase que el CRM**: el plan gratuito solo permite 2 proyectos activos. El ERP vive en su propio esquema `erp`.
+Ningún secreto se escribe en el código ni en este documento.
 
 | Pieza | Valor |
 |---|---|
-| Dominio | `erp.clinicacarmenfontes.com` |
-| Repositorio | `clinicacarmenfontes/ERP` (nuevo, privado) |
-| Vercel | proyecto `erp` en el mismo scope que el CRM (`albertos-projects-89d418d7`) |
-| Supabase | proyecto **nuevo** `erp-carmen-fontes` (región UE), separado del CRM |
+| Dominio | `erp.clinicacarmenfontes.com` ✅ (CNAME en GoDaddy) |
+| Repositorio | `clinicacarmenfontes/ERPclinica` ✅ |
+| Vercel | proyecto `er-pclinica` (scope `albertos-projects-89d418d7`) ✅ |
+| Supabase | el del CRM, esquema **`erp`** |
 | Único usuario | `admin@clinicacarmenfontes.com` (fijado en `src/lib/auth/allowlist.ts`) |
 
-## 1. Supabase (proyecto nuevo)
+**Aislamiento con el CRM** (comprobado en `tests/coexistence-crm.test.ts` con las migraciones reales de ambos):
+- El ERP no crea ni modifica nada en `public`, el esquema del CRM.
+- Los usuarios del CRM (`anon` y `authenticated`) no tienen ni permiso de uso sobre `erp`: no pueden listar, leer ni ejecutar nada.
+- El ERP usa su propia clave secreta, que se puede revocar sin afectar al CRM, y solo trabaja con el esquema `erp` y el bucket `erp-documentos`.
+- Comparten Supabase Auth: admin@ es el mismo usuario en los dos. Si aún no tuviera ficha en el CRM, se creará al entrar por primera vez en el ERP.
 
-1. <https://supabase.com/dashboard> → **New project** → nombre `erp-carmen-fontes`, región *West EU*, contraseña de BBDD fuerte (guárdala en tu gestor).
-2. **SQL Editor** → ejecuta, en este orden, el contenido completo de:
+## 1. Supabase (proyecto del CRM)
+
+1. **SQL Editor** → ejecuta, en este orden, el contenido completo de:
    1. `supabase/migrations/20261018000001_core_schema.sql`
    2. `supabase/migrations/20261018000002_seeds_and_ingest.sql`
    3. `supabase/migrations/20261018000003_repository.sql`
 
-   La segunda crea también el bucket privado `documentos` (originales subidos).
-3. **Authentication → Sign In / Providers**: desactiva *Email* y deja solo **Azure** (paso 2).
-4. **Authentication → URL Configuration**:
-   - Site URL: `https://erp.clinicacarmenfontes.com`
-   - Redirect URLs: `https://erp.clinicacarmenfontes.com/auth/callback` y `http://localhost:3000/auth/callback`
-5. **Project Settings → API Keys**: copia la *URL*, la *publishable key* y la *secret key* (para el paso 3).
+   Crean el esquema `erp` y el bucket privado `erp-documentos`. No tocan nada del CRM.
+2. **Project Settings → Data API → Exposed schemas** → añade `erp` (además de `public`) → *Save*. Lo necesita el servidor del ERP para leer y escribir por la API. Los usuarios del CRM siguen sin acceso, porque no tienen permisos en ese esquema.
+3. **Project Settings → API Keys → Secret keys → Create new secret key** → nombre `erp`. Es exclusiva del ERP y se puede revocar sin afectar al CRM.
+4. **Authentication → URL Configuration → Redirect URLs** → añade `https://erp.clinicacarmenfontes.com/auth/callback`. Deja el *Site URL* del CRM como está.
+5. El proveedor **Azure** ya está configurado para el CRM y el ERP usa el mismo, así que no hay nada que tocar en Microsoft Entra para el login.
 
-## 2. Microsoft Entra ID (login)
+> Al compartir el registro de Microsoft con el CRM no se puede limitar en Entra a una sola persona, porque el equipo del CRM lo necesita. Esa limitación la aplica el ERP: proxy → 403, callback → cierra la sesión, y cada página o acción lo vuelve a comprobar.
 
-Recomendado: un registro de aplicación **propio** para el ERP (no reutilizar el del CRM), así se puede limitar a una sola persona.
+## 2. Vercel (`er-pclinica`)
 
-1. <https://entra.microsoft.com> → **App registrations → New registration**
-   - Nombre: `ERP Carmen Fontes`
-   - *Accounts in this organizational directory only* (single tenant)
-   - Redirect URI (Web): `https://<ref-del-proyecto>.supabase.co/auth/v1/callback` (aparece en Supabase → Azure provider)
-2. **Certificates & secrets → New client secret** (24 meses). Copia el *Value*.
-3. En Supabase → **Azure provider**: *Client ID* = Application (client) ID, *Secret* = el value, *Azure Tenant URL* = `https://login.microsoftonline.com/<Directory (tenant) ID>`. Guardar.
-4. **Barrera adicional (recomendada)**: Entra → **Enterprise applications → ERP Carmen Fontes → Properties → Assignment required = Yes**, y en *Users and groups* añade solo a `admin@`. Así Microsoft ni siquiera emite la sesión a otra cuenta.
+**Settings → Environment Variables** → Production:
 
-> La app ya bloquea por su cuenta cualquier email distinto de admin@ (proxy → 403, callback → cierra sesión, y cada página o acción lo vuelve a comprobar). El paso 4 añade una barrera más.
+| Variable | Valor |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | la misma URL que el CRM |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | la misma *publishable key* que el CRM |
+| `SUPABASE_SECRET_KEY` | la clave secreta **`erp`** del paso 1.3 (*Sensitive*) |
+| `ANTHROPIC_API_KEY` | clave de la API de Anthropic (*Sensitive*) |
 
-## 3. Vercel
+Borra las variables `VITE_*` que quedaban del ERP anterior. Después: **Deployments → ⋯ → Redeploy**.
 
-1. Crea el repositorio privado `clinicacarmenfontes/ERP` y sube esta carpeta (el `.gitignore` ya excluye `.env*`, `tests/fixtures/private/` y los CSV/PDF de la raíz, que tienen datos reales).
-2. Vercel → **Add New → Project** → importa `clinicacarmenfontes/ERP` (framework Next.js, build por defecto, Node 24).
-3. **Settings → Environment Variables** (Production y Preview):
+## 3. Copias de seguridad
 
-   | Variable | Valor |
-   |---|---|
-   | `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase |
-   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | publishable key |
-   | `SUPABASE_SECRET_KEY` | secret key (marcar *Sensitive*) |
+El plan gratuito de Supabase no guarda copias que puedas descargar. Lo que te protege son los Excel del gestor (versionados) y los ficheros originales, que se guardan en `erp-documentos`. Más adelante añadiremos una exportación completa periódica.
 
-4. **Settings → Domains** → añade `erp.clinicacarmenfontes.com`. Vercel indica el registro DNS: un `CNAME erp → cname.vercel-dns.com` en el proveedor donde ya está el de `crm`.
-5. Redespliega tras guardar las variables (Deployments → ⋯ → Redeploy).
-
-## 4. Repositorio de facturas (OneDrive de info@)
+## 4. Repositorio de facturas (opcional, OneDrive de info@)
 
 El ERP lee la carpeta con el **mínimo permiso**: info@ la comparte en solo lectura con admin@, y el ERP usa la sesión de admin@. No hay un permiso de aplicación que dé acceso a los archivos de todo el tenant.
 
 1. **Compartir la carpeta**, desde la cuenta info@: en OneDrive web, sobre `Clínica Carmen Fontes/01. Contabilidad/01. Facturas` → *Compartir* → *Personas específicas* → `admin@clinicacarmenfontes.com` → **Puede ver** → *Copiar vínculo*. Ese vínculo es `ONEDRIVE_FOLDER_URL`.
-2. **Permiso en Entra**, en el registro "ERP Carmen Fontes" → *API permissions* → *Add* → Microsoft Graph → **Delegated** → `Files.Read.All` y `offline_access`. Es delegado: solo da acceso a lo que admin@ ya puede ver, es decir, a esa carpeta.
+2. **Permiso en Entra**, en el registro de aplicación que usa el proveedor Azure de Supabase (el del CRM) → *API permissions* → *Add* → Microsoft Graph → **Delegated** → `Files.Read.All` y `offline_access`. Es delegado: solo da acceso a lo que admin@ ya puede ver, es decir, a esa carpeta.
 3. **Variables en Vercel**, en Production:
 
    | Variable | Valor |
@@ -69,15 +63,9 @@ El ERP lee la carpeta con el **mínimo permiso**: info@ la comparte en solo lect
    | `TOKEN_ENCRYPTION_KEY` | `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` (*Sensitive*) |
    | `ONEDRIVE_FOLDER_URL` | el vínculo del paso 1 |
    | `REPOSITORY_FROM_YEAR` | `2026` |
-   | `ANTHROPIC_API_KEY` | clave de la API de Anthropic (*Sensitive*) |
 
-4. Redespliega, **cierra sesión y vuelve a entrar** (Microsoft pedirá aceptar el acceso de lectura) → *Repositorio* → **Sincronizar OneDrive**.
-
-Primera sincronización de 2026: unos 530 ficheros. La lectura es en tandas, y la pantalla sigue sola hasta terminar.
-
-- Coste aproximado con Sonnet: céntimos por factura.
-- Los ficheros de PICADAS que casan con Optimydent se vinculan solos como justificante.
-- A la bandeja van las facturas de doctoras, las emitidas y lo que no case.
+4. Redespliega, **cierra sesión y vuelve a entrar** (Microsoft pedirá aceptar el acceso de lectura) → *Repositorio* → **Actualizar listado**. Esto solo lista los ficheros, sin coste.
+5. Marca las facturas que quieras leer (normalmente las de doctoras del trimestre) → **Leer con Claude**. Nada se lee automáticamente.
 
 ## 5. Comprobación
 
@@ -95,7 +83,7 @@ Primera sincronización de 2026: unos 530 ficheros. La lectura es en tandas, y l
 pnpm install
 cp .env.example .env.local   # y rellena las tres variables
 pnpm dev                     # http://localhost:3000
-pnpm test                    # 64 tests: BBDD (PGlite), parsers, carga real y repositorio
+pnpm test                    # 68 tests: BBDD (PGlite), convivencia con el CRM, parsers, carga real y repositorio
 ```
 
 Los tests con ficheros reales de 3T2026 leen `tests/fixtures/private/`. Esa carpeta no va al repositorio, y sin ella esos tests se saltan.

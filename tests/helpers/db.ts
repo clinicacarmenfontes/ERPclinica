@@ -13,7 +13,7 @@ const SUPABASE_STUBS = `
     $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   create role anon;
   create role authenticated;
-  create role service_role;
+  create role service_role bypassrls; -- como en Supabase: la clave secreta se salta RLS
 `;
 
 /** Postgres en memoria con todas las migraciones del repo aplicadas en orden. */

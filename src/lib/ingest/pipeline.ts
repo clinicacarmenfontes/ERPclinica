@@ -11,7 +11,7 @@ import { DocumentFormatError, type NormalizedInvoice, type ParsedDocument } from
 //   → sync_run → original en Storage → función SQL atómica → estadísticas.
 // La lógica antiduplicados/merge/conflictos vive en SQL (fn_ingest_*), no aquí.
 
-export const STORAGE_BUCKET = "documentos";
+export const STORAGE_BUCKET = "erp-documentos";
 const BATCH = 200;
 
 export type IngestReport = {

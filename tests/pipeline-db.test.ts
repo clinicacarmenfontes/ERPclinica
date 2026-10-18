@@ -24,7 +24,7 @@ describe("paridad TS ↔ SQL", () => {
     ["", "Ñandú S.L."],
   ])("normalización y huella iguales para %s / %s", async (taxId, name) => {
     const r = await db.query<{ t: string | null; n: string; h: string }>(
-      "select public.norm_tax_id($1) as t, public.norm_name($2) as n, public.invoice_dedup_hash(public.issuer_key_of($1, $2), ' a-12 /2026 ', '2026-09-30', 1234.5) as h",
+      "select erp.norm_tax_id($1) as t, erp.norm_name($2) as n, erp.invoice_dedup_hash(erp.issuer_key_of($1, $2), ' a-12 /2026 ', '2026-09-30', 1234.5) as h",
       [taxId, name],
     );
     expect(r.rows[0].t).toBe(normTaxId(taxId));
@@ -41,7 +41,7 @@ describe.skipIf(!hasPrivate)("ingesta real 3T2026 en BBDD", () => {
   const load = async (items: NormalizedInvoice[]) => {
     const res: { result: string; message?: string }[] = [];
     for (let i = 0; i < items.length; i += 200) {
-      const r = await db.query<{ r: typeof res }>("select public.fn_ingest_invoices($1::jsonb, $2, null) as r", [
+      const r = await db.query<{ r: typeof res }>("select erp.fn_ingest_invoices($1::jsonb, $2, null) as r", [
         JSON.stringify(items.slice(i, i + 200)),
         run,
       ]);
@@ -54,7 +54,7 @@ describe.skipIf(!hasPrivate)("ingesta real 3T2026 en BBDD", () => {
 
   beforeAll(async () => {
     db = await createTestDb();
-    run = (await db.query<{ id: string }>("select public.fn_start_sync_run('optimydent_fichero', 'subida_manual', 'test') as id")).rows[0].id;
+    run = (await db.query<{ id: string }>("select erp.fn_start_sync_run('optimydent_fichero', 'subida_manual', 'test') as id")).rows[0].id;
   });
 
   it("emitidas: 462 altas; recargar el mismo fichero → 462 sin cambios", async () => {
@@ -65,7 +65,7 @@ describe.skipIf(!hasPrivate)("ingesta real 3T2026 en BBDD", () => {
     expect(first.tally).toEqual({ insertada: 462 });
     expect((await load(doc.invoices)).tally).toEqual({ sin_cambios: 462 });
     const { rows } = await db.query<{ n: number; total: string }>(
-      "select count(*)::int as n, sum(total) as total from public.invoices where direction = 'emitida'",
+      "select count(*)::int as n, sum(total) as total from erp.invoices where direction = 'emitida'",
     );
     expect(rows[0].n).toBe(462);
   });
@@ -78,13 +78,13 @@ describe.skipIf(!hasPrivate)("ingesta real 3T2026 en BBDD", () => {
     expect(tally.conflicto).toBeGreaterThanOrEqual(1);
     expect(tally.insertada + tally.conflicto).toBe(doc.invoices.length);
     const c = await db.query<{ number: string; differences: Record<string, unknown> }>(
-      `select i.invoice_number as number, c.differences from public.ingest_conflicts c
-         join public.invoices i on i.id = c.existing_invoice_id`,
+      `select i.invoice_number as number, c.differences from erp.ingest_conflicts c
+         join erp.invoices i on i.id = c.existing_invoice_id`,
     );
     expect(c.rows.map((r) => r.number)).toContain("OPTO2026/1013");
     // Todo lo conocido queda clasificado por regla; nada sin partida salvo tipos nuevos.
     const sinPartida = await db.query<{ n: number }>(
-      "select count(*)::int as n from public.invoices where direction = 'recibida' and category_id is null",
+      "select count(*)::int as n from erp.invoices where direction = 'recibida' and category_id is null",
     );
     expect(sinPartida.rows[0].n).toBe(0);
   });

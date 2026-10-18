@@ -94,7 +94,7 @@ Así puedes actualizar cada semana, cada mes o cada trimestre sin que los númer
 8. **Nóminas** (`payroll_months`): no salen de Optimydent; las aporta el gestor y alimentan el P&G y el 111 de trabajadores.
 9. **RLS sin políticas** en todo: solo el servidor (clave secreta) lee y escribe.
 10. **Edición**: matriz completa en [`procedimientos-edicion.md`](procedimientos-edicion.md). La base de datos exige motivo para anular o reabrir, bloquea cualquier cambio en facturas anuladas y deja las anuladas como "lápida" para que un dato erróneo no vuelva a entrar.
-11. **Auth**: Supabase Auth con Microsoft, igual que el CRM (proyecto Supabase nuevo y separado).
+11. **Auth y BBDD**: el mismo proyecto Supabase que el CRM (el plan gratuito permite 2 proyectos), en el esquema `erp`. Los usuarios del CRM no tienen permisos sobre él, el ERP tiene su propia clave secreta y el login de Microsoft es compartido. Lo comprueba `tests/coexistence-crm.test.ts`.
 
 Probado en PGlite: duplicado exacto, mismo nº con otro importe, líneas descuadradas, total ≠ base + IVA, cambio de importe, borrado, asiento descuadrado, UPDATE/DELETE/TRUNCATE del Diario, cadena manipulada y alta en trimestre cerrado → **todo bloqueado**; merge Pendiente → Pagada → registrado en historial.
 
