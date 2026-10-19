@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "@/lib/ingest/parsers";
 import { parseCaixaBankCsv } from "@/lib/ingest/parsers/banks";
-import { parseGastos } from "@/lib/ingest/parsers/optimydent";
+import { parseGastos, SPEC_GASTOS } from "@/lib/ingest/parsers/optimydent";
+import { readOptimydentTable } from "@/lib/ingest/parsers/optimydent-table";
 import type { PdfPage, PdfWord } from "@/lib/ingest/parsers/pdf";
 import { DocumentFormatError, type ParsedDocument } from "@/lib/ingest/types";
+import { buildXlsx } from "./helpers/xlsx";
 
 // Ficheros reales de 3T2026 en tests/fixtures/private/ (fuera del repositorio:
 // tienen datos de pacientes y bancos). Sin ellos, estos tests se saltan.
@@ -77,7 +79,8 @@ describe.skipIf(!hasPrivate)("ficheros reales 3T2026", () => {
     expect(sum(doc.invoices.filter((i) => i.total < 0).map((i) => i.total))).toBe(-9155.62);
     const p = doc.invoices.find((i) => i.invoice_number === "P1632/2026")!;
     expect(p).toMatchObject({ total: 200, status: "pagada", paid_at: "2026-09-30", issuer_tax_id: "B67717082" });
-    expect(p.counterparty).toMatchObject({ kind: "paciente", tax_id: "26896154T", clinical_record: "8" });
+    expect(p.counterparty).toMatchObject({ kind: "paciente", tax_id: "26896154T" });
+    expect(p.counterparty).not.toHaveProperty("clinical_record");
     expect(doc.invoices.every((i) => i.vat_total === 0)).toBe(true);
   });
 
@@ -134,7 +137,7 @@ describe("Optimydent: columnas elegidas a mano (sintético)", () => {
   ];
 
   it("admite columnas de más y en otro orden, sin conservar las que no van a BBDD", () => {
-    const doc = expectKind(parseGastos([page(headers, [row])]), "optimydent_gastos");
+    const doc = expectKind(parseGastos(readOptimydentTable([page(headers, [row])], SPEC_GASTOS)), "optimydent_gastos");
     expect(doc.invoices).toHaveLength(1);
     expect(doc.invoices[0]).toMatchObject({ issuer_tax_id: "B12345678", invoice_number: "F-1", total: 121, vat_total: 21 });
     expect(doc.invoices[0]).toMatchObject({ expense_type: "Alquiler" });
@@ -147,6 +150,93 @@ describe("Optimydent: columnas elegidas a mano (sintético)", () => {
   it("rechaza el listado si falta una columna imprescindible", () => {
     const without = (col: number) => [headers.filter((_, i) => i !== col), row.filter((_, i) => i !== col)] as const;
     const [h, r] = without(headers.indexOf("Factura"));
-    expect(() => parseGastos([page(h, [r])])).toThrow(/imprescindibles para la contabilidad: factura/);
+    expect(() => parseGastos(readOptimydentTable([page(h, [r])], SPEC_GASTOS))).toThrow(/imprescindibles para la contabilidad: factura/);
+  });
+});
+
+describe("Optimydent en Excel (sintético)", () => {
+  const parse = (rows: (string | number | null)[][]) => parseDocument(buildXlsx(rows), { asOf: "2026-10-06" });
+
+  const gastosHeader = [
+    "Proveedor", "Razón social", "CIF", "Email", "Tipo de gasto", "Forma de pago", "Fecha", "Concepto", "Cantidad",
+    "Impuestos", "Tipo de impuesto", "Factura",
+  ];
+
+  it("gastos: números y fechas del Excel, varias filas de una factura agrupadas, columnas extra fuera", async () => {
+    const doc = expectKind(
+      await parse([
+        gastosHeader,
+        ["FINANDREU SL", "FINANDREU SL", "B97118640", "a@b.es", "Alquiler Local", "Recibo domiciliado", "2026-09-01", "Alquiler", 1477.69, 256.46, "IVA 21%(21,00%)", "A-101"],
+        ["DEPOSITO", "DEPOSITO DENTAL SL", "B11111111", null, "Compra Material Clínica", "Tarjeta", "2026-09-14", null, 121, 21, "IVA 21%", "F-7"],
+        ["DEPOSITO", "DEPOSITO DENTAL SL", "B11111111", null, "Compra Material Clínica", "Tarjeta", "2026-09-14", null, 110, 10, "IVA 10%", "F-7"],
+      ]),
+      "optimydent_gastos",
+    );
+    expect(doc.invoices).toHaveLength(2);
+    expect(doc.invoices[0]).toMatchObject({ issue_date: "2026-09-01", total: 1477.69, vat_total: 256.46, base_total: 1221.23 });
+    const f7 = doc.invoices[1];
+    expect(f7).toMatchObject({ invoice_number: "F-7", total: 231, vat_total: 31 });
+    expect(f7.lines.map((l) => l.vat_rate)).toEqual([0.21, 0.1]);
+    expect(JSON.stringify(doc)).not.toMatch(/a@b\.es/);
+    expect(doc.warnings.join()).toMatch(/adicionales ignoradas: email/);
+    expect(doc.missingColumns).toEqual(["asiento contable"]);
+    expect(doc.summary).toMatch(/Excel/);
+  });
+
+  it("gastos: sin una columna imprescindible se rechaza diciendo cuál", async () => {
+    const header = gastosHeader.filter((h) => h !== "Tipo de gasto");
+    await expect(parse([header, ["X", "X SL", "B1", null, "Tarjeta", "2026-09-01", null, 10, 0, "Exento", "1"]])).rejects.toThrow(
+      /imprescindibles para la contabilidad: tipo de gasto/,
+    );
+  });
+
+  it("saldos: el nº de historia no se pide ni se guarda", async () => {
+    const doc = expectKind(
+      await parse([
+        ["Nº Historia", "Nombre", "Documento de identificación", "Teléfono", "Saldo", "Próxima cita"],
+        ["000890", "DAVID ROMERO", "11111111H", 664432918, 3189, "2026-09-30"],
+        ["000903", "ANA MARTINEZ", "22222222J", null, 511.5, null],
+      ]),
+      "optimydent_saldos_acreedores",
+    );
+    expect(doc.lines).toEqual([
+      { tax_id: "11111111H", name: "DAVID ROMERO", phone: "664432918", postal_code: null, balance: 3189 },
+      { tax_id: "22222222J", name: "ANA MARTINEZ", phone: null, postal_code: null, balance: 511.5 },
+    ]);
+    expect(doc.warnings.join()).toMatch(/adicionales ignoradas: no historia, proxima cita/);
+  });
+
+  it("emitidas: sin fecha de pago se rechaza (sin ella todas saldrían pendientes)", async () => {
+    await expect(
+      parse([
+        ["Fecha factura", "Número", "Razón social", "Doc. Ident.", "Base imponible", "Impuestos", "Total"],
+        ["2026-09-24", "P1607/2026", "CARLOTA DOIRO", "44877357X", 180, 0, 180],
+      ]),
+    ).rejects.toThrow(/imprescindibles para la contabilidad: fecha de pago/);
+  });
+
+  it("emitidas: fila con importes que no cuadran → error con el nº de fila", async () => {
+    await expect(
+      parse([
+        ["Fecha factura", "Número", "Razón social", "Doc. Ident.", "Base imponible", "Impuestos", "Total", "Fecha de pago"],
+        ["2026-09-24", "P1607/2026", "CARLOTA DOIRO", "44877357X", 180, 0, 181, "2026-09-24"],
+      ]),
+    ).rejects.toThrow(/Fila 2: P1607\/2026 base \+ impuestos ≠ total/);
+  });
+});
+
+const hasXlsxSamples = existsSync(join(PRIVATE, "optimydent-gastos-muestra.xlsx"));
+
+describe.skipIf(!hasXlsxSamples)("Excel reales de Optimydent (muestras con pocas columnas)", () => {
+  it("se leen y reconocen; avisan de las columnas imprescindibles que no se exportaron", async () => {
+    await expect(parseDocument(fixture("optimydent-gastos-muestra.xlsx"), { asOf: "x" })).rejects.toThrow(
+      /imprescindibles para la contabilidad: factura, impuestos, tipo de impuesto./,
+    );
+    await expect(parseDocument(fixture("optimydent-emitidas-muestra.xlsx"), { asOf: "x" })).rejects.toThrow(
+      /imprescindibles para la contabilidad: fecha de pago/,
+    );
+    await expect(parseDocument(fixture("optimydent-pacientes-muestra.xlsx"), { asOf: "x" })).rejects.toThrow(
+      /imprescindibles para la contabilidad: documento de identificacion/,
+    );
   });
 });
