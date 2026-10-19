@@ -66,28 +66,40 @@ function columnIndex(ref: string): number {
   return [...letters].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
 }
 
-/** Filas de la primera hoja (sin las filas vacías). */
-export function readXlsxRows(bytes: Uint8Array): XlsxCell[][] {
+export type XlsxSheet = {
+  name: string;
+  /** rows[i] es la fila i+1 de la hoja ([] si está vacía). */
+  rows: XlsxCell[][];
+};
+
+/** Todas las hojas del libro, en orden, con su nombre. */
+export function readXlsxSheets(bytes: Uint8Array): XlsxSheet[] {
   const files = unzip(bytes, (n) => n === "xl/workbook.xml" || n === "xl/_rels/workbook.xml.rels" || n === "xl/sharedStrings.xml" || n.startsWith("xl/worksheets/"));
   const workbook = files.get("xl/workbook.xml");
   if (!workbook) throw new DocumentFormatError("El fichero no es un Excel (.xlsx).");
-
-  // Primera hoja según el libro (no siempre es sheet1.xml).
-  const firstSheet = /<sheet\s[^>]*>/.exec(workbook)?.[0];
-  const rid = firstSheet ? attr(firstSheet, "r:id") : undefined;
-  const rels = files.get("xl/_rels/workbook.xml.rels") ?? "";
-  const target = [...rels.matchAll(/<Relationship\s[^>]*>/g)].map((m) => m[0]).find((r) => attr(r, "Id") === rid);
-  const targetPath = target ? attr(target, "Target")!.replace(/^\/?(xl\/)?/, "xl/") : "xl/worksheets/sheet1.xml";
-  const sheet = files.get(targetPath);
-  if (!sheet) throw new DocumentFormatError("El Excel no tiene ninguna hoja con datos.");
-
+  const rels = [...(files.get("xl/_rels/workbook.xml.rels") ?? "").matchAll(/<Relationship\s[^>]*>/g)].map((m) => m[0]);
   const shared = [...(files.get("xl/sharedStrings.xml") ?? "").matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => textOf(m[1]));
 
+  return [...workbook.matchAll(/<sheet\s[^>]*>/g)].map((sm, i) => {
+    const rid = attr(sm[0], "r:id");
+    const target = rels.find((r) => attr(r, "Id") === rid);
+    const path = target ? attr(target, "Target")!.replace(/^\/?(xl\/)?/, "xl/") : `xl/worksheets/sheet${i + 1}.xml`;
+    const sheet = files.get(path);
+    if (!sheet) throw new DocumentFormatError("El Excel tiene una hoja que no se puede leer.");
+    return { name: decodeXml(attr(sm[0], "name") ?? ""), rows: parseSheet(sheet, shared) };
+  });
+}
+
+function parseSheet(sheet: string, shared: string[]): XlsxCell[][] {
   const rows: XlsxCell[][] = [];
-  for (const rm of sheet.matchAll(/<row\b[^>]*?(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+  let nextRow = 0;
+  for (const rm of sheet.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+    const rAttr = attr(rm[1], "r");
+    const ri = rAttr ? Number(rAttr) - 1 : nextRow;
+    nextRow = ri + 1;
     const row: XlsxCell[] = [];
     let next = 0;
-    for (const cm of (rm[1] ?? "").matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+    for (const cm of (rm[2] ?? "").matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
       const tag = cm[1];
       const body = cm[2] ?? "";
       const ref = attr(tag, "r");
@@ -104,8 +116,14 @@ export function readXlsxRows(bytes: Uint8Array): XlsxCell[][] {
       if (typeof value === "string" && value.trim() === "") value = null;
       row[ci] = value;
     }
-    const filled = Array.from(row, (c) => c ?? null);
-    if (filled.some((c) => c !== null)) rows.push(filled);
+    rows[ri] = Array.from(row, (c) => c ?? null);
   }
-  return rows;
+  return Array.from(rows, (r) => r ?? []);
+}
+
+/** Filas de la primera hoja (sin las filas vacías). */
+export function readXlsxRows(bytes: Uint8Array): XlsxCell[][] {
+  const [first] = readXlsxSheets(bytes);
+  if (!first) throw new DocumentFormatError("El Excel no tiene ninguna hoja con datos.");
+  return first.rows.filter((r) => r.some((c) => c !== null));
 }

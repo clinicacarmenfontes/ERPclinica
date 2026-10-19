@@ -20,6 +20,8 @@ export type NormalizedInvoice = {
   issuer_name: string;
   invoice_number: string;
   issue_date: string;
+  /** Datos de facturación tal como figuran en esta factura (pueden no coincidir con la ficha). */
+  bill_to?: { name: string; tax_id: string | null; postal_code: string | null };
   counterparty?: {
     kind: "paciente" | "proveedor" | "profesional" | "cliente";
     tax_id: string | null;
