@@ -13,6 +13,7 @@ import {
   Receipt,
   RefreshCw,
   Settings,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/gastos", label: "Gastos", icon: ArrowUpFromLine, exact: false },
   { href: "/dashboard/tesoreria", label: "Tesorería", icon: Landmark, exact: false },
   { href: "/dashboard/contabilidad", label: "Contabilidad", icon: BookOpen, exact: false },
+  { href: "/dashboard/nominas", label: "Nóminas", icon: Users, exact: false },
   { href: "/dashboard/fiscal", label: "Fiscal", icon: Receipt, exact: false },
   { href: "/dashboard/sincronizacion", label: "Sincronización", icon: RefreshCw, exact: false },
   { href: "/dashboard/repositorio", label: "Repositorio", icon: FolderOpen, exact: false },

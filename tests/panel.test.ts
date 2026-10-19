@@ -82,3 +82,51 @@ describe("cashflow semanal", () => {
     expect(cashflowHorizon("2026-10-20", 2)).toBe("2026-11-02");
   });
 });
+
+describe("cuenta de resultados de gestión", () => {
+  it("cascada: margen bruto, EBITDA antes y después de la socia, financiero fuera", async () => {
+    const { profitAndLoss, share } = await import("@/lib/finance");
+    const pl = profitAndLoss(
+      {
+        income: [
+          { date: "2026-07-10", base: 10000, kind: "paciente" },
+          { date: "2026-07-20", base: 2000, kind: "cliente" },
+          { date: "2026-06-30", base: 999, kind: "paciente" }, // fuera del rango
+        ],
+        expenses: [
+          { date: "2026-07-01", base: 1500, category: "Clínico" },
+          { date: "2026-07-01", base: 1200, category: "Alquiler y local" },
+          { date: "2026-07-02", base: 800, category: "Personal" },
+          { date: "2026-07-03", base: 30, category: "Financiero e impuestos" },
+          { date: "2026-07-04", base: 70, category: null },
+        ],
+        payroll: [
+          { period: "2026-07", gross_salaries: 3000, company_social_security: 900, partner_remuneration: 2500 },
+          { period: "2026-06", gross_salaries: 1, company_social_security: 1, partner_remuneration: 1 },
+        ],
+      },
+      "2026-07-01",
+      "2026-09-30",
+    );
+    expect(pl).toMatchObject({
+      ingresos: 12000,
+      ingresosClinica: 10000,
+      ingresosOtrasClinicas: 2000,
+      costeDirecto: 1500,
+      margenBruto: 10500,
+      estructura: 1270,
+      sinPartida: 70,
+      personalDoctoras: 800,
+      nominas: 3900,
+      ebitdaAntesSocia: 4530,
+      socia: 2500,
+      ebitda: 2030,
+      financiero: 30,
+      mesesConNominas: 1,
+      meses: 3,
+    });
+    expect(pl.porPartida[0]).toEqual({ name: "Nóminas y SS empresa", amount: 3900 });
+    expect(share(pl.socia, pl.ingresos)).toBe(20.8);
+    expect(share(1, 0)).toBeNull();
+  });
+});

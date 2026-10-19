@@ -330,6 +330,11 @@ export function parseEmitidas(table: Table): ParsedDocument {
       issuer_name: COMPANY.legalName,
       invoice_number: number,
       issue_date: issueDate,
+      bill_to: {
+        name: cleanText(cell(r, "razon social")) || doc || "",
+        tax_id: doc,
+        postal_code: /^\d{5}$/.test(postal) ? postal : null,
+      },
       counterparty: {
         kind: "paciente",
         tax_id: doc,

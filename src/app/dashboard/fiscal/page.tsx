@@ -4,10 +4,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { KpiCard, PageHeader, QuarterTabs } from "@/components/erp/common";
+import { GenerateGestorButton } from "@/components/erp/gestor-export";
 import { QuarterClose } from "@/components/erp/quarter-close";
 import { requireAdminPage } from "@/lib/auth/session";
 import { compute303, type VatRow } from "@/lib/fiscal";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { listGestorVersions, loadGestorModel } from "@/lib/gestor/generate";
+import type { CheckLevel } from "@/lib/gestor/model";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { parseQuarterParam, quarterLabel, quarterRange } from "@/lib/periods";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -17,6 +20,14 @@ type Withholding = { model: string; counterparty_id: string; invoices: number; b
 type Payroll = { period: string; gross_salaries: number; worker_withholding: number };
 type Row347 = { direction: string; party_id: string; tax_id: string | null; name: string; annual_amount: number; q1: number | null; q2: number | null; q3: number | null; q4: number | null };
 type PeriodEvent = { action: string; reason: string | null; actor: string; created_at: string };
+
+const LEVEL: Record<CheckLevel, { label: string; className: string }> = {
+  error: { label: "Bloquea", className: "bg-destructive/10 text-destructive" },
+  aviso: { label: "Revisar", className: "bg-warning/15 text-warning" },
+  info: { label: "Info", className: "bg-muted text-muted-foreground" },
+  ok: { label: "OK", className: "bg-success/15 text-success" },
+};
+const ORDER: CheckLevel[] = ["error", "aviso", "info", "ok"];
 
 const pct = (rate: number) => `${Math.round(Number(rate) * 10000) / 100} %`;
 const sum = (xs: number[]) => Math.round(xs.reduce((s, x) => s + Number(x) * 100, 0)) / 100;
@@ -62,6 +73,12 @@ export default async function FiscalPage(props: PageProps<"/dashboard/fiscal">) 
       .lte("issue_date", to),
   ]);
   for (const r of [vat, settings, wh, payroll, m347, period, events, review]) if (r.error) throw r.error;
+
+  const [gestor, versions] = await Promise.all([loadGestorModel(q.year, q.quarter), listGestorVersions(q.year, q.quarter)]);
+  const latest = versions[0];
+  const checks = [...gestor.checks].sort((a, b) => ORDER.indexOf(a.level) - ORDER.indexOf(b.level));
+  const blocked = checks.some((c) => c.level === "error");
+  const okCount = checks.filter((c) => c.level === "ok").length;
 
   const prorrata = Number(settings.data!.vat_prorrata_pct);
   const m303 = compute303(vat.data!, prorrata);
@@ -123,6 +140,114 @@ export default async function FiscalPage(props: PageProps<"/dashboard/fiscal">) 
             )}
           </div>
           <QuarterClose year={q.year} quarter={q.quarter} closed={closed} pendingIssues={review.count ?? 0} />
+        </CardContent>
+      </Card>
+
+      <Card id="excel-gestor">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
+          <div className="max-w-2xl">
+            <CardTitle className="font-montserrat">Excel del gestor · {quarterLabel(q)}</CardTitle>
+            <CardDescription>
+              Las mismas hojas y columnas que el Excel que ya se entregaba (Saldos, Ingresos, Gastos y Resumen). Al
+              generarlo se relee el fichero y se compara celda a celda con los datos: si algo no cuadra, no se guarda.
+              Cada generación es una versión nueva; ninguna se pisa.
+            </CardDescription>
+          </div>
+          <GenerateGestorButton year={q.year} quarter={q.quarter} nextVersion={(latest?.version ?? 0) + 1} blocked={blocked} />
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 text-sm">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-lg bg-muted p-3">
+              <p className="text-xs text-muted-foreground">Ingresos</p>
+              <p className="font-medium tabular-nums">
+                {gestor.kpis.ing_n} facturas · {formatCurrency(gestor.kpis.ing_base)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-muted p-3">
+              <p className="text-xs text-muted-foreground">Gastos</p>
+              <p className="font-medium tabular-nums">
+                {gestor.kpis.gas_n} líneas · {formatCurrency(gestor.kpis.gas_base)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-muted p-3">
+              <p className="text-xs text-muted-foreground">Retenciones profesionales</p>
+              <p className="font-medium tabular-nums">{formatCurrency(gestor.kpis.gas_ret)}</p>
+            </div>
+            <div className="rounded-lg bg-muted p-3">
+              <p className="text-xs text-muted-foreground">
+                Saldos de pacientes{gestor.saldosDate ? ` a ${formatDate(gestor.saldosDate)}` : ""}
+              </p>
+              <p className="font-medium tabular-nums">
+                {gestor.kpis.sal_acre_n + gestor.kpis.sal_deu_n} pacientes · {formatCurrency(gestor.kpis.sal_neto)}
+              </p>
+            </div>
+          </div>
+
+          {latest &&
+            (latest.fingerprint === gestor.fingerprint ? (
+              <p className="rounded-lg bg-success/10 p-3 text-success">
+                La v{latest.version} ({formatDateTime(latest.generated_at)}) está al día: los datos no han cambiado desde
+                entonces.
+              </p>
+            ) : (
+              <p className="rounded-lg bg-warning/10 p-3 text-warning">
+                Hay cambios en los datos desde la v{latest.version} ({formatDateTime(latest.generated_at)}). Si ya la
+                entregaste, genera una versión nueva y envíasela al gestor.
+              </p>
+            ))}
+
+          <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
+            {checks
+              .filter((c) => c.level !== "ok")
+              .map((c) => (
+                <details key={c.id} className="p-3" open={c.level === "error"}>
+                  <summary className="flex cursor-pointer items-center gap-2">
+                    <Badge className={LEVEL[c.level].className}>{LEVEL[c.level].label}</Badge>
+                    <span className="font-medium">{c.title}</span>
+                    {c.items.length > 0 && <span className="text-xs text-muted-foreground">· {c.items.length}</span>}
+                  </summary>
+                  {c.detail && <p className="mt-1 text-xs text-muted-foreground">{c.detail}</p>}
+                  {c.items.length > 0 && (
+                    <ul className="mt-1 list-disc pl-5 text-xs text-muted-foreground">
+                      {c.items.slice(0, 40).map((it, i) => (
+                        <li key={i}>{it}</li>
+                      ))}
+                      {c.items.length > 40 && <li>y {c.items.length - 40} más…</li>}
+                    </ul>
+                  )}
+                </details>
+              ))}
+            <p className="p-3 text-xs text-success">{okCount} controles correctos.</p>
+          </div>
+
+          {versions.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Versión</TableHead>
+                  <TableHead>Fichero</TableHead>
+                  <TableHead>Generado</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {versions.map((v) => (
+                  <TableRow key={v.id}>
+                    <TableCell className="font-medium">v{v.version}</TableCell>
+                    <TableCell className="text-sm">{v.file_name}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatDateTime(v.generated_at)} · {v.generated_by}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <a className="text-primary underline" href={`/api/gestor/${v.id}`}>
+                        Descargar
+                      </a>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 

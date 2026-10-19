@@ -4,11 +4,13 @@ import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, Repeat } fro
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CashflowChart, IncomeExpenseChart, type CashPoint, type MonthPoint } from "@/components/erp/charts";
 import { PageHeader, StatusBadge, effectiveStatus } from "@/components/erp/common";
+import { FinancePanel } from "@/components/erp/finance-panel";
 import { requireAdminPage } from "@/lib/auth/session";
 import { cashflowHorizon, weeklyCashflow } from "@/lib/cashflow";
 import { loadDashboard } from "@/lib/data/dashboard";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { todayMadrid } from "@/lib/periods";
+import { profitAndLoss } from "@/lib/finance";
+import { quarterLabel, quarterOf, quarterRange, todayMadrid } from "@/lib/periods";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Resumen | ERP Clínica Carmen Fontes" };
@@ -117,6 +119,12 @@ export default async function ResumenPage() {
   const cash: CashPoint[] = weeklyCashflow(d.cashflow, today, d.bankBalance?.total ?? 0, WEEKS);
   const later = d.cashflow.filter((c) => c.expected_date > horizon).length;
 
+  // Rentabilidad: trimestre en curso y año hasta hoy (las nóminas se cuentan por mes transcurrido).
+  const q = quarterOf(today);
+  const financeData = { ...d.finance, payroll: d.payroll };
+  const plQuarter = profitAndLoss(financeData, quarterRange(q).from, today);
+  const plYear = profitAndLoss(financeData, `${year}-01-01`, today);
+
   const attention = d.reviewCount + d.conflictCount + d.alerts.length;
   const until = (k: string) => formatDate(d.freshness[k] ?? null);
 
@@ -164,6 +172,14 @@ export default async function ResumenPage() {
           monthLabel="Pendiente de cobro / pago"
         />
       </div>
+
+      <FinancePanel
+        quarter={plQuarter}
+        year={plYear}
+        quarterLabel={quarterLabel(q)}
+        yearLabel={`${year} hasta hoy`}
+        currentMonth={today.slice(0, 7)}
+      />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">

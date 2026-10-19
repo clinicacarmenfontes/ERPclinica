@@ -361,13 +361,18 @@ describe("bancos y saldos", () => {
       as_of: "2026-10-01",
       side: "deudores",
       lines: [
-        { tax_id: "44504119Q", name: "A", balance: -23 },
-        { tax_id: "44504119Q", name: "A", balance: -10 },
+        { tax_id: "44504119Q", name: "Hija", balance: -23 },
+        { tax_id: "44504119Q", name: "Hermano", balance: -10 },
         { tax_id: null, name: "Sin Doc", balance: -5 },
       ],
     };
     const r1 = await one<{ r: Row }>("select erp.fn_ingest_balance_snapshot($1::jsonb, null, null) as r", [JSON.stringify(snap)]);
-    expect(r1.r).toMatchObject({ result: "insertada", total: -38, patients: 2 });
+    // Una línea por paciente del listado, aunque dos compartan documento (hermanos con el DNI de la madre).
+    expect(r1.r).toMatchObject({ result: "insertada", total: -38, patients: 3 });
+    const lines = await db.query<{ name: string; balance: string }>(
+      "select name, balance from erp.balance_snapshot_lines order by line_no",
+    );
+    expect(lines.rows.map((l) => [l.name, Number(l.balance)])).toEqual([["Hija", -23], ["Hermano", -10], ["Sin Doc", -5]]);
     const r2 = await one<{ r: Row }>("select erp.fn_ingest_balance_snapshot($1::jsonb, null, null) as r", [JSON.stringify(snap)]);
     expect(r2.r.result).toBe("sin_cambios");
     await expect(

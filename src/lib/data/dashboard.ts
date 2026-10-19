@@ -1,4 +1,5 @@
 import "server-only";
+import type { FinanceExpense, FinanceIncome } from "@/lib/finance";
 import { detectRecurringAlerts, recurringWindowStart, type RecurringAlert } from "@/lib/recurring";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { monthlyTotals, type MonthlyTotals } from "./invoices";
@@ -42,9 +43,23 @@ export type DashboardData = {
   recentBank: RecentBankTx[];
   alerts: RecurringAlert[];
   freshness: Record<string, string | null>;
+  /** Facturas del año (base) para la cuenta de resultados. */
+  finance: { income: FinanceIncome[]; expenses: FinanceExpense[] };
   reviewCount: number;
   conflictCount: number;
 };
+
+/** Todas las filas de una consulta, de 1.000 en 1.000 (límite de PostgREST). */
+async function fetchAll<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < 50; i++) {
+    const { data, error } = await page(i * 1000, i * 1000 + 999);
+    if (error) throw new Error(error.message);
+    out.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
 
 export async function loadDashboard(year: number): Promise<DashboardData> {
   const db = createAdminClient();
@@ -58,7 +73,7 @@ export async function loadDashboard(year: number): Promise<DashboardData> {
   const expensesUntil = freshness.optimydent_gastos ?? null;
   const windowStart = recurringWindowStart(expensesUntil);
 
-  const [months, prevMonths, payroll, cashflow, latest, recentInvoices, recentBank, recurring, review, conflicts] =
+  const [months, prevMonths, payroll, cashflow, latest, recentInvoices, recentBank, recurring, review, conflicts, income, expenses] =
     await Promise.all([
       monthlyTotals(year),
       monthlyTotals(year - 1),
@@ -96,6 +111,30 @@ export async function loadDashboard(year: number): Promise<DashboardData> {
         : Promise.resolve({ data: [], error: null }),
       db.from("invoices").select("id", { count: "exact", head: true }).eq("needs_review", true).neq("status", "anulada"),
       db.from("ingest_conflicts").select("id", { count: "exact", head: true }).eq("resolution", "pendiente"),
+      fetchAll((from, to) =>
+        db
+          .from("invoices")
+          .select("issue_date, base_total, parties(kind)")
+          .eq("direction", "emitida")
+          .neq("status", "anulada")
+          .gte("issue_date", `${year}-01-01`)
+          .lte("issue_date", `${year}-12-31`)
+          .order("id")
+          .range(from, to)
+          .returns<{ issue_date: string; base_total: number; parties: { kind: string } | null }[]>(),
+      ),
+      fetchAll((from, to) =>
+        db
+          .from("invoices")
+          .select("issue_date, base_total, expense_categories(name)")
+          .eq("direction", "recibida")
+          .neq("status", "anulada")
+          .gte("issue_date", `${year}-01-01`)
+          .lte("issue_date", `${year}-12-31`)
+          .order("id")
+          .range(from, to)
+          .returns<{ issue_date: string; base_total: number; expense_categories: { name: string } | null }[]>(),
+      ),
     ]);
   for (const r of [payroll, cashflow, latest, recentInvoices, recentBank, recurring, review, conflicts]) {
     if (r.error) throw r.error;
@@ -126,6 +165,10 @@ export async function loadDashboard(year: number): Promise<DashboardData> {
       expensesUntil,
     ),
     freshness,
+    finance: {
+      income: income.map((r) => ({ date: r.issue_date, base: Number(r.base_total), kind: r.parties?.kind ?? "paciente" })),
+      expenses: expenses.map((r) => ({ date: r.issue_date, base: Number(r.base_total), category: r.expense_categories?.name ?? null })),
+    },
     reviewCount: review.count ?? 0,
     conflictCount: conflicts.count ?? 0,
   };
