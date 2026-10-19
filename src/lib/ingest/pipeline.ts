@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { rematchPending } from "@/lib/repository/match";
 import { sha256Hex } from "./dedup-hash";
 import { parseDocument } from "./parsers";
@@ -22,6 +22,8 @@ export type IngestReport = {
   message?: string;
   stats?: Record<string, number>;
   warnings: string[];
+  /** Facturas del listado que no han entrado, con el motivo. */
+  notLoaded?: string[];
   /** Columnas secundarias ausentes: se puede volver a subir el listado con ellas. */
   missingColumns?: string[];
   runId?: string;
@@ -105,7 +107,7 @@ export async function ingestFile(
     }
     report.stats = stats;
     const withIssues = (stats.error ?? 0) + (stats.conflicto ?? 0) + (stats.periodo_cerrado ?? 0) > 0;
-    report.status = withIssues || report.warnings.length > 0 || report.missingColumns ? "avisos" : "ok";
+    report.status = withIssues || report.warnings.length > 0 || report.notLoaded || report.missingColumns ? "avisos" : "ok";
     await db
       .from("sync_runs")
       .update({
@@ -117,6 +119,7 @@ export async function ingestFile(
           ...stats,
           fichero: file.name,
           avisos: report.warnings.slice(0, 50),
+          no_cargadas: (report.notLoaded ?? []).slice(0, 100),
           columnas_no_exportadas: report.missingColumns ?? [],
         },
       })
@@ -168,6 +171,15 @@ async function storeOriginal(
 
 type InvoiceResult = { result: string; message?: string; index: number };
 
+// Por qué una factura del listado no ha quedado cargada tal cual.
+const NOT_LOADED: Record<string, string> = {
+  conflicto: "ya hay otra con el mismo nº y otros datos; decide en Sincronización → Conflictos",
+  conflicto_pendiente: "sigue pendiente en Sincronización → Conflictos",
+  ignorada_anulada: "este mismo dato se anuló en el ERP, así que se ignora",
+  ignorada_resuelta: "en un conflicto anterior decidiste mantener la que ya estaba",
+  periodo_cerrado: "su trimestre está cerrado; reábrelo en Fiscal si tiene que entrar",
+};
+
 async function ingestInvoices(
   db: Db,
   invoices: NormalizedInvoice[],
@@ -182,9 +194,13 @@ async function ingestInvoices(
     if (error) throw new Error(error.message);
     for (const r of data as InvoiceResult[]) {
       stats[r.result] = (stats[r.result] ?? 0) + 1;
-      if (r.result === "error") {
+      const why = r.result === "error" ? (r.message ?? "error") : NOT_LOADED[r.result];
+      if (why) {
         const inv = chunk[r.index];
-        report.warnings.push(`${inv.issuer_name} · ${inv.invoice_number}: ${r.message}`);
+        const who = inv.direction === "emitida" ? (inv.counterparty?.name ?? inv.issuer_name) : inv.issuer_name;
+        (report.notLoaded ??= []).push(
+          `${who} · ${inv.invoice_number} · ${formatDate(inv.issue_date)} · ${formatCurrency(inv.total)}: ${why}`,
+        );
       }
     }
   }
