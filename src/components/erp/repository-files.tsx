@@ -109,7 +109,7 @@ export function RepositoryFiles({ files, canRead }: { files: RepositoryFile[]; c
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={read} disabled={!canRead || pending || selected.size === 0}>
           {pending ? <Loader2 className="animate-spin" /> : <Sparkles />}
-          Leer con Claude ({selected.size})
+          Leer facturas ({selected.size})
         </Button>
         <span className="text-xs text-muted-foreground">
           {progress ?? "Marca los ficheros que quieras leer. Cada lectura tiene un pequeño coste."}

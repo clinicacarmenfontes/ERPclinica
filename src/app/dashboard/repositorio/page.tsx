@@ -84,7 +84,7 @@ export default async function RepositorioPage(props: PageProps<"/dashboard/repos
     <div className="flex flex-col gap-6 p-8">
       <PageHeader
         title="Repositorio de facturas"
-        description="Apoyo opcional al flujo principal (listados de Optimydent): consulta la carpeta «01. Facturas» del OneDrive de info@ y lee con Claude solo las facturas que elijas, para vincularlas como justificante o contabilizar las que no están en Optimydent (doctoras, emitidas)."
+        description="Apoyo opcional al flujo principal (listados de Optimydent): consulta la carpeta «01. Facturas» del OneDrive de info@ y lee automáticamente solo las facturas que elijas, para vincularlas como justificante o contabilizar las que no están en Optimydent (doctoras, emitidas)."
       >
         <RefreshInventoryButton disabled={!connected || !configured} />
       </PageHeader>

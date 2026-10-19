@@ -24,6 +24,8 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-series-income: var(--series-income);
+  --color-series-expense: var(--series-expense);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -79,6 +81,10 @@
   --chart-3: #D1B7A1;
   --chart-4: #6FA88A;
   --chart-5: #D4B2A7;
+  /* Series de Ingresos / Gastos (validadas: CVD y contraste sobre la tarjeta). */
+  --series-income: #B45F5E;
+  --series-expense: #4A72B5;
+  --chart-grid: #EFE9DF;
   --radius: 0.625rem;
   --sidebar: #2C2C2A;
   --sidebar-foreground: #FDFBF7;
@@ -116,6 +122,9 @@
   --chart-3: #D1B7A1;
   --chart-4: #7FC2A0;
   --chart-5: #D4B2A7;
+  --series-income: #C8706C;
+  --series-expense: #5A8BD6;
+  --chart-grid: #35332F;
   --sidebar: #171615;
   --sidebar-foreground: #FDFBF7;
   --sidebar-primary: #C99191;

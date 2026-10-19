@@ -6,6 +6,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   BookOpen,
+  ClipboardCheck,
   FolderOpen,
   Landmark,
   LayoutDashboard,
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Resumen", icon: LayoutDashboard, exact: true },
+  { href: "/dashboard/revision", label: "Revisión", icon: ClipboardCheck, exact: false },
   { href: "/dashboard/ingresos", label: "Ingresos", icon: ArrowDownToLine, exact: false },
   { href: "/dashboard/gastos", label: "Gastos", icon: ArrowUpFromLine, exact: false },
   { href: "/dashboard/tesoreria", label: "Tesorería", icon: Landmark, exact: false },
