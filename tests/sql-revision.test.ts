@@ -73,9 +73,23 @@ describe("tipo de gasto nuevo → cuenta y partida", () => {
     );
   });
 
-  it("la cuenta de una línea ya informada no se puede cambiar", async () => {
-    await ingest([gasto({ expense_type: "Alquiler Local" })]);
-    await expect(db.query("update erp.invoice_lines set account_code = '62900000'")).rejects.toThrow(/inmutable/);
+  it("la cuenta de una línea se puede cambiar hasta que la factura se contabiliza", async () => {
+    const [r] = await ingest([gasto({ expense_type: "Alquiler Local" })]);
+    await db.query("update erp.invoice_lines set account_code = '62900000'");
+    const { id: entry } = await one<{ id: string }>("select erp.fn_post_journal_entry($1::jsonb) as id", [
+      JSON.stringify({
+        entry_date: "2026-10-06",
+        description: "Factura N-1",
+        kind: "factura_recibida",
+        posted_by: "test",
+        lines: [
+          { account_code: "62900000", debit: 121, credit: 0 },
+          { account_code: "62900000", debit: 0, credit: 121 },
+        ],
+      }),
+    ]);
+    await db.query("update erp.invoices set journal_entry_id = $1 where id = $2", [entry, r.invoice_id]);
+    await expect(db.query("update erp.invoice_lines set account_code = '62100000'")).rejects.toThrow(/inmutable/);
   });
 });
 

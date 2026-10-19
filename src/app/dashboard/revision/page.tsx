@@ -16,24 +16,24 @@ export const metadata: Metadata = { title: "Revisión | ERP Clínica Carmen Font
 // Qué significa cada motivo y cómo se resuelve. Sin entrada → texto genérico.
 const HOW_TO: Record<string, string> = {
   tipo_gasto_nuevo:
-    "Optimydent usa un tipo de gasto que el ERP no conocía, así que no tiene cuenta contable. Asígnale cuenta y partida en Configuración: se corrigen a la vez todas sus facturas.",
+    "Optimydent usa un tipo de gasto que el ERP no conocía, así que no tiene cuenta contable. Asígnale cuenta y partida en Configuración (se corrigen a la vez todas sus facturas), o cambia el tipo de esta factura en ⋯ → Corregir datos.",
   tipo_gasto_sin_cuenta:
-    "El tipo de gasto no tiene cuenta contable. Asígnasela en Configuración: se corrigen a la vez todas sus facturas.",
+    "El tipo de gasto no tiene cuenta contable. Asígnasela en Configuración (se corrigen a la vez todas sus facturas), o cambia el tipo en ⋯ → Corregir datos.",
   sin_numero:
-    "Cargo sin nº de factura (seguros, recibos…). Comprueba que el cargo es correcto y dalo por revisado.",
+    "Cargo sin nº de factura (seguros, recibos…). Si tienes el nº, ponlo en ⋯ → Corregir datos; si no lo tiene, comprueba el cargo y dalo por revisado.",
   numero_factura_repetido:
-    "Hay otra factura viva con el mismo emisor y nº. Corrige el nº o la fecha de la errónea, anula la que sobre o, si las dos son correctas, dalas por revisadas.",
+    "Hay otra factura viva con el mismo emisor y nº. En ⋯ → Corregir datos cambia el nº o la fecha de la errónea; anula la que sobre, o da las dos por revisadas si son correctas.",
   nif_emisor_es_la_clinica:
-    "El proveedor está dado de alta en Optimydent con el CIF de la clínica. Corrige la ficha del proveedor en Optimydent, anula esta factura y vuelve a subir el listado: entrará con el CIF correcto.",
+    "El proveedor está grabado en Optimydent con el CIF de la clínica. Pon su CIF en ⋯ → Corregir datos y corrige también su ficha en Optimydent.",
   linea_repetida_en_origen:
-    "Optimydent tiene dos líneas idénticas en esta factura. Si es un duplicado, bórralo en Optimydent, anula esta factura y vuelve a subir el listado. Si es correcta, dala por revisada.",
+    "Optimydent exportó la misma línea dos veces y el total sale duplicado. En ⋯ → Corregir datos marca la línea repetida para quitarla: queda una sola y el total se recalcula. Bórrala también en Optimydent.",
   tipos_distintos_en_factura:
-    "Optimydent asigna varios tipos de gasto a la misma factura; se ha usado el primero. Si es correcto, dala por revisada.",
+    "Optimydent asigna varios tipos de gasto a la misma factura; se ha usado el primero. Elige el correcto en ⋯ → Corregir datos.",
   iva_no_cuadra:
     "El IVA no corresponde al tipo indicado. Revísalo en Optimydent; si está bien, dala por revisada.",
-  sin_nif: "Falta el NIF del tercero. Complétalo en Optimydent y vuelve a subir el listado, o dala por revisada.",
+  sin_nif: "Falta el NIF. Añádelo en ⋯ → Corregir datos (y en Optimydent).",
 };
-const GENERIC = "Compruébala y, si está bien, dala por revisada desde el menú ⋯.";
+const GENERIC = "Compruébala; corrige lo que haga falta en ⋯ → Corregir datos o, si está bien, dala por revisada.";
 
 export default async function RevisionPage(props: PageProps<"/dashboard/revision">) {
   await requireAdminPage();

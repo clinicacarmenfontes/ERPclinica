@@ -213,9 +213,7 @@ describe("fn_ingest_invoices", () => {
   it("las líneas siguen siendo inmutables salvo rellenar una descripción vacía", async () => {
     await ingest([gasto()]);
     await expect(db.query("update erp.invoice_lines set base = 1")).rejects.toThrow(/inmutable/);
-    await expect(db.query("update erp.invoice_lines set description = 'x', account_code = null")).rejects.toThrow(
-      /inmutable/,
-    );
+    await expect(db.query("update erp.invoice_lines set description = 'x', vat_amount = 0")).rejects.toThrow(/inmutable/);
     await expect(db.query("delete from erp.invoice_lines")).rejects.toThrow(/inmutable/);
     await db.query("update erp.invoice_lines set description = 'Alquiler'");
     await expect(db.query("update erp.invoice_lines set description = 'Otro'")).rejects.toThrow(/inmutable/);

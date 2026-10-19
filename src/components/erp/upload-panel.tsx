@@ -135,6 +135,18 @@ export function UploadPanel({ today }: { today: string }) {
                       .join(" · ")}
                   </p>
                 )}
+                {r.notLoaded && (
+                  <details open className="text-xs">
+                    <summary className="cursor-pointer font-medium text-warning">
+                      {r.notLoaded.length} factura(s) no se han cargado
+                    </summary>
+                    <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                      {r.notLoaded.slice(0, 50).map((w, j) => (
+                        <li key={j}>{w}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
                 {r.missingColumns && (
                   <p className="text-xs text-warning">
                     Faltan columnas secundarias: {r.missingColumns.join(", ")}. Se han dejado vacías; si las necesitas,
