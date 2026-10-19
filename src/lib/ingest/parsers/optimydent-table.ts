@@ -1,14 +1,18 @@
 import { normHeader } from "../normalize";
 import { DocumentFormatError } from "../types";
 import { joinCellWords, type PdfPage, type PdfWord } from "./pdf";
+import type { XlsxCell } from "./xlsx";
 
-// Port de contabilidad/pdf_tables.py: los PDF de Optimydent son tablas HTML
+// Listados de Optimydent como tabla de columnas con nombre, vengan del Excel
+// (readOptimydentSheet, el formato recomendado) o del PDF (readOptimydentTable).
+// En ambos las columnas se localizan por nombre (orden libre, extras ignoradas).
+//
+// PDF — port de contabilidad/pdf_tables.py: los PDF de Optimydent son tablas HTML
 // impresas con pdfmake. La cabecera es una fila de rectángulos azul oscuro
 // (#3f4c6b) repetida en cada página, uno por columna:
 //   · los límites de columna salen de esos rectángulos;
 //   · cada fila empieza donde aparece su "ancla" (fecha, nº de historia…);
 //   · cada fragmento de texto se asigna a (fila, columna) por su posición.
-//   · las columnas se localizan por nombre (orden libre, extras ignoradas).
 // Al final se exige que TODO el texto del cuerpo esté asignado; si no, error
 // en lugar de devolver datos incompletos.
 
@@ -53,13 +57,17 @@ function resolveColumns(found: string[], known: string[]): Map<string, number> {
   return index;
 }
 
-export type TableRow = { page: number; cells: Record<string, string> };
+/** Texto (PDF y Excel) o número (celda numérica del Excel). */
+export type CellValue = string | number;
+/** `where` sitúa la fila en el fichero para los mensajes: "Página 3" / "Fila 12". */
+export type TableRow = { where: string; cells: Record<string, CellValue> };
 export type Table = {
   columns: string[];
   /** Columnas conocidas que no venían en el PDF (sus celdas quedan vacías). */
   missing: string[];
   rows: TableRow[];
-  pages: number;
+  /** Para el resumen: "12 páginas" / "Excel". */
+  origin: string;
   warnings: string[];
 };
 export type TableSpec = {
@@ -75,8 +83,65 @@ export type TableSpec = {
   anchorRe: RegExp;
 };
 
+/** Rechaza si falta una obligatoria y avisa de las columnas ignoradas. */
+function checkHeader(found: string[], index: Map<string, number>, spec: TableSpec, warnings: string[]) {
+  const missingRequired = spec.required
+    .map((req) => (Array.isArray(req) ? req : [req]))
+    .filter((group) => !group.some((name) => index.has(name)))
+    .map((group) => group.join(" o "));
+  if (missingRequired.length > 0) {
+    throw new DocumentFormatError(
+      `Faltan columnas imprescindibles para la contabilidad: ${missingRequired.join(", ")}.
+` +
+        `Añádelas al exportar desde Optimydent.
+Encontradas: ${found.filter(Boolean).join(", ")}`,
+    );
+  }
+  const used = new Set(index.values());
+  const extra = found.filter((name, i) => !used.has(i) && name);
+  if (extra.length > 0) warnings.push(`Columnas adicionales ignoradas: ${extra.join(", ")}.`);
+}
+
+/** Columnas conocidas presentes / ausentes según el índice resuelto. */
+function present(spec: TableSpec, index: Map<string, number> | null) {
+  return {
+    columns: spec.columns.filter((name) => index?.has(name)),
+    missing: index ? spec.columns.filter((name) => !index.has(name)) : [],
+  };
+}
+
+/**
+ * Excel de Optimydent: cabecera en la primera fila con datos y un registro por
+ * fila. Cada fila debe tener valor en la columna ancla (fecha, saldo…).
+ */
+export function readOptimydentSheet(sheet: XlsxCell[][], spec: TableSpec): Table {
+  const warnings: string[] = [];
+  if (sheet.length === 0) throw new DocumentFormatError("El Excel está vacío.");
+  const header = sheet[0].map((c) => normHeader(String(c ?? "")));
+  const index = resolveColumns(header, spec.columns);
+  checkHeader(header, index, spec, warnings);
+  const anchorIdx = index.get(spec.anchorColumn)!;
+  const rows: TableRow[] = sheet.slice(1).map((r, k) => {
+    const rowNo = k + 2;
+    if (r[anchorIdx] === null || r[anchorIdx] === undefined) {
+      throw new DocumentFormatError(`Fila ${rowNo}: falta «${spec.anchorColumn}».`);
+    }
+    return {
+      where: `Fila ${rowNo}`,
+      cells: Object.fromEntries(
+        spec.columns.map((name) => {
+          const ci = index.get(name);
+          const v = ci === undefined ? null : r[ci];
+          return [name, v === null || v === undefined ? "" : v];
+        }),
+      ),
+    };
+  });
+  return { ...present(spec, index), rows, origin: "Excel", warnings };
+}
+
 export function readOptimydentTable(pages: PdfPage[], spec: TableSpec): Table {
-  const { columns: known, required, anchorColumn, anchorRe } = spec;
+  const { columns: known, anchorColumn, anchorRe } = spec;
   const warnings: string[] = [];
   let bounds: [number, number][] | null = null;
   let names: string[] | null = null;
@@ -112,19 +177,7 @@ export function readOptimydentTable(pages: PdfPage[], spec: TableSpec): Table {
 
     const pageIndex = resolveColumns(pageNames, known);
     if (!index) {
-      const missingRequired = required
-        .map((req) => (Array.isArray(req) ? req : [req]))
-        .filter((group) => !group.some((name) => pageIndex.has(name)))
-        .map((group) => group.join(" o "));
-      if (missingRequired.length > 0) {
-        throw new DocumentFormatError(
-          `Faltan columnas imprescindibles para la contabilidad: ${missingRequired.join(", ")}.\n` +
-            `Añádelas al exportar desde Optimydent.\nEncontradas: ${pageNames.join(", ")}`,
-        );
-      }
-      const used = new Set(pageIndex.values());
-      const extra = pageNames.filter((_, i) => !used.has(i));
-      if (extra.length > 0) warnings.push(`Columnas adicionales ignoradas: ${extra.map((e) => e || "(sin nombre)").join(", ")}.`);
+      checkHeader(pageNames, pageIndex, spec, warnings);
       names = pageNames;
       index = pageIndex;
       bounds = pageBounds;
@@ -198,12 +251,11 @@ export function readOptimydentTable(pages: PdfPage[], spec: TableSpec): Table {
   // Solo salen las columnas conocidas; el texto de las adicionales se descarta.
   const idx = index ?? new Map<string, number>();
   return {
-    columns: known.filter((name) => idx.has(name)),
-    missing: index ? known.filter((name) => !idx.has(name)) : [],
-    pages: pages.length,
+    ...present(spec, index),
+    origin: `${pages.length} páginas`,
     warnings,
     rows: rows.map((r) => ({
-      page: r.page,
+      where: `Página ${r.page}`,
       cells: Object.fromEntries(
         known.map((name) => {
           const ci = idx.get(name);

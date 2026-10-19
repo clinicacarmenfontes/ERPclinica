@@ -55,7 +55,6 @@ export type BankTransaction = {
 export type BalanceLine = {
   tax_id: string | null;
   name: string;
-  clinical_record: string | null;
   phone: string | null;
   postal_code: string | null;
   balance: number;

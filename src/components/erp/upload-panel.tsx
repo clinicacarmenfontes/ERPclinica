@@ -71,9 +71,10 @@ export function UploadPanel({ today }: { today: string }) {
       <CardHeader>
         <CardTitle className="font-montserrat">Subir ficheros</CardTitle>
         <CardDescription>
-          Listados de Optimydent en PDF (gastos, facturas emitidas, pacientes acreedores y deudores), PDF de movimientos de
-          Kutxabank y CSV de CaixaBank. Se reconocen por su contenido; puedes subir varios a la vez y repetir sin miedo: lo
-          ya cargado no se duplica.
+          Listados de Optimydent en Excel (gastos, facturas emitidas, pacientes acreedores y deudores), PDF de movimientos
+          de Kutxabank y CSV de CaixaBank. Exporta Optimydent en Excel: el PDF corta las columnas que no caben en la
+          hoja. Se reconocen por su contenido; puedes subir varios a la vez y repetir sin miedo: lo ya cargado no se
+          duplica.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -97,12 +98,12 @@ export function UploadPanel({ today }: { today: string }) {
         >
           {pending ? <Loader2 className="size-6 animate-spin text-primary" /> : <FileUp className="size-6 text-primary" />}
           <p className="text-sm font-medium">{pending ? `Procesando ${current ?? ""}…` : "Arrastra aquí los ficheros o haz clic"}</p>
-          <p className="text-xs text-muted-foreground">PDF o CSV · máx. 4 MB por fichero</p>
+          <p className="text-xs text-muted-foreground">Excel, PDF o CSV · máx. 4 MB por fichero</p>
           <input
             ref={inputRef}
             type="file"
             multiple
-            accept=".pdf,.csv,application/pdf,text/csv"
+            accept=".xlsx,.pdf,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,text/csv"
             className="hidden"
             onChange={(e) => processFiles(Array.from(e.target.files ?? []))}
           />
@@ -113,7 +114,7 @@ export function UploadPanel({ today }: { today: string }) {
             Fecha de los listados de saldos de pacientes
           </Label>
           <Input id="asOf" type="date" value={asOf} max={today} onChange={(e) => setAsOf(e.target.value)} className="w-40" />
-          <span className="text-xs text-muted-foreground">Optimydent no la incluye en el PDF: por defecto, hoy.</span>
+          <span className="text-xs text-muted-foreground">Optimydent no la incluye en el listado: por defecto, hoy.</span>
         </div>
 
         {reports.length > 0 && (

@@ -4,16 +4,19 @@ import {
   cleanText,
   dateRange,
   issuerKey,
+  normHeader,
   normInvoiceNumber,
   normTaxId,
   parseEsAmountCents,
   parseEsDate,
 } from "../normalize";
 import { DocumentFormatError, type BalanceLine, type InvoiceLine, type NormalizedInvoice, type ParsedDocument } from "../types";
-import { readOptimydentTable, type TableRow, type TableSpec } from "./optimydent-table";
-import type { PdfPage } from "./pdf";
+import type { Table, TableRow, TableSpec } from "./optimydent-table";
+import type { XlsxCell } from "./xlsx";
 
 // Port de contabilidad/optimydent.py + agrupación de líneas por factura.
+// Los parsers reciben la tabla ya leída, del Excel (formato recomendado: el
+// PDF corta las columnas que no caben en el A4) o del PDF.
 
 // Solo se leen las columnas que acaban en BBDD; cualquier otra que se haya
 // marcado al exportar (email, teléfono…) se ignora.
@@ -24,16 +27,17 @@ import type { PdfPage } from "./pdf";
 //     listado con ellas completa SOLO esos datos (fn_fill_invoice_gaps).
 const DATE_ANCHOR = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
 
+// El nº de historia no se lee: no sirve para la contabilidad.
 export const SPEC_SALDOS: TableSpec = {
-  columns: ["no historia", "nombre", "documento de identificacion", "telefono", "codigo postal", "saldo"],
+  columns: ["nombre", "documento de identificacion", "telefono", "codigo postal", "saldo"],
   // Sin documento, el paciente se identificaría por el nombre y se duplicaría.
-  required: ["no historia", "nombre", "documento de identificacion", "saldo"],
-  anchorColumn: "no historia",
-  anchorRe: /^\d+$/,
+  required: ["nombre", "documento de identificacion", "saldo"],
+  anchorColumn: "saldo",
+  anchorRe: /^[+-]?[\d.]+,\d{2}(€|EUR)?$/,
 };
 export const SPEC_EMITIDAS: TableSpec = {
   columns: [
-    "fecha factura", "numero", "historia", "doc ident paciente", "razon social", "doc ident",
+    "fecha factura", "numero", "doc ident paciente", "razon social", "doc ident",
     "codigo postal", "base imponible", "impuestos", "total", "forma de pago", "fecha de pago",
   ],
   required: [
@@ -55,7 +59,16 @@ export const SPEC_GASTOS: TableSpec = {
   anchorRe: DATE_ANCHOR,
 };
 
-/** Reconoce el listado por el título de la primera página ("Gastos | Optimydent"…). */
+/** Reconoce el Excel por su cabecera (no trae título). */
+export function detectOptimydentSheetKind(sheet: XlsxCell[][]): "gastos" | "emitidas" | "saldos" | null {
+  const header = new Set((sheet[0] ?? []).map((c) => normHeader(String(c ?? ""))));
+  if (header.has("fecha factura")) return "emitidas";
+  if (header.has("cif") || header.has("tipo de gasto") || header.has("proveedor")) return "gastos";
+  if (header.has("saldo")) return "saldos";
+  return null;
+}
+
+/** Reconoce el PDF por el título de la primera página ("Gastos | Optimydent"…). */
 export function detectOptimydentKind(title: string): "gastos" | "emitidas" | "saldos" | null {
   if (!/Optimydent/i.test(title)) return null;
   if (/Facturas emitidas/i.test(title)) return "emitidas";
@@ -64,36 +77,53 @@ export function detectOptimydentKind(title: string): "gastos" | "emitidas" | "sa
   return null;
 }
 
+/** Texto de la celda (un número del Excel se pasa a texto tal cual: 46018). */
 function cell(row: TableRow, col: string): string {
-  return row.cells[col] ?? "";
+  const v = row.cells[col] ?? "";
+  return typeof v === "number" ? String(v) : v;
 }
 
+/** Importe en céntimos: número del Excel o texto '1.477,69 €' del PDF. */
 function amount(row: TableRow, col: string): number {
-  const v = cell(row, col);
+  const v = row.cells[col] ?? "";
   try {
+    if (typeof v === "number") return Math.round(v * 100);
     const c = parseEsAmountCents(v);
     if (c === null) throw new Error("vacío");
     return c;
   } catch {
-    throw new DocumentFormatError(`Página ${row.page}: importe no válido en «${col}»: «${v}».`);
+    throw new DocumentFormatError(`${row.where}: importe no válido en «${col}»: «${v}».`);
   }
 }
 
+/** Fecha ISO: 'AAAA-MM-DD' o nº de serie del Excel, o 'DD/MM/AAAA' del PDF. */
 function date(row: TableRow, col: string, required = true): string | null {
-  const v = cell(row, col);
+  const v = row.cells[col] ?? "";
   try {
-    const d = parseEsDate(v);
+    let d: string | null;
+    if (typeof v === "number") {
+      // Nº de serie de Excel: días desde 1899-12-30.
+      d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86_400_000).toISOString().slice(0, 10);
+    } else {
+      const iso = /^(\d{4})-(\d{2})-(\d{2})(?:[T ].*)?$/.exec(v.trim());
+      d = parseEsDate(iso ? `${iso[3]}/${iso[2]}/${iso[1]}` : v);
+    }
     if (required && !d) throw new Error("vacía");
     return d;
   } catch {
-    throw new DocumentFormatError(`Página ${row.page}: fecha no válida en «${col}»: «${v}».`);
+    throw new DocumentFormatError(`${row.where}: fecha no válida en «${col}»: «${v}».`);
   }
 }
 
-/** "IVA 21%(21,00%)" → 0.21 · "Exento(0,00%)" → 0. null si no se reconoce. */
-export function vatRateFromLabel(label: string): number | null {
-  const m = /\((\d+),(\d{2})%\)/.exec(label);
-  return m ? Number(`${m[1]}.${m[2]}`) / 100 : null;
+/**
+ * "IVA 21%(21,00%)" → 0.21 · "Exento(0,00%)" → 0 · "IVA 10%" → 0.1 · 0.21 / 21
+ * (celda numérica del Excel) → 0.21. null si no se reconoce.
+ */
+export function vatRateFromLabel(label: string | number): number | null {
+  if (typeof label === "number") return label > 1 ? label / 100 : label;
+  const m = /\((\d+),(\d{2})%\)/.exec(label) ?? /(\d+)(?:[.,](\d+))?\s*%/.exec(label);
+  if (m) return Number(`${m[1]}.${m[2] ?? "0"}`) / 100;
+  return /exent/i.test(label) ? 0 : null;
 }
 
 /** Tipo de IVA estándar más cercano a impuestos/base (para facturas emitidas). */
@@ -106,7 +136,6 @@ function inferVatRate(baseCents: number, vatCents: number): number {
 // ── Gastos ──────────────────────────────────────────────────────────────────
 
 type GastoRow = {
-  page: number;
   date: string;
   number: string;
   taxId: string | null;
@@ -122,14 +151,12 @@ type GastoRow = {
   account: string | null;
 };
 
-export function parseGastos(pages: PdfPage[]): ParsedDocument {
-  const table = readOptimydentTable(pages, SPEC_GASTOS);
+export function parseGastos(table: Table): ParsedDocument {
   const warnings = [...table.warnings];
   const rows: GastoRow[] = table.rows.map((r) => {
     const supplier = cleanText(cell(r, "proveedor"));
     const account = cleanText(cell(r, "asiento contable"));
     return {
-      page: r.page,
       date: date(r, "fecha")!,
       number: cleanText(cell(r, "factura")),
       taxId: normTaxId(cell(r, "cif")),
@@ -141,7 +168,7 @@ export function parseGastos(pages: PdfPage[]): ParsedDocument {
       totalCents: amount(r, "cantidad"),
       vatCents: amount(r, "impuestos"),
       vatLabel: cleanText(cell(r, "tipo de impuesto")),
-      vatRate: vatRateFromLabel(cell(r, "tipo de impuesto")),
+      vatRate: vatRateFromLabel(r.cells["tipo de impuesto"] ?? ""),
       account: /^\d{8}$/.test(account) ? account : null,
     };
   });
@@ -237,7 +264,7 @@ export function parseGastos(pages: PdfPage[]): ParsedDocument {
   const [from, to] = dateRange(rows.map((r) => r.date));
   return {
     kind: "optimydent_gastos",
-    summary: `Gastos de Optimydent · ${rows.length} líneas → ${invoices.length} facturas · ${table.pages} páginas`,
+    summary: `Gastos de Optimydent · ${rows.length} líneas → ${invoices.length} facturas · ${table.origin}`,
     warnings,
     missingColumns: table.missing,
     coversFrom: from,
@@ -249,8 +276,7 @@ export function parseGastos(pages: PdfPage[]): ParsedDocument {
 
 // ── Facturas emitidas (pacientes) ───────────────────────────────────────────
 
-export function parseEmitidas(pages: PdfPage[]): ParsedDocument {
-  const table = readOptimydentTable(pages, SPEC_EMITIDAS);
+export function parseEmitidas(table: Table): ParsedDocument {
   const warnings = [...table.warnings];
   const byNumber = new Map<string, NormalizedInvoice>();
   const dates: string[] = [];
@@ -259,12 +285,12 @@ export function parseEmitidas(pages: PdfPage[]): ParsedDocument {
     const issueDate = date(r, "fecha factura")!;
     dates.push(issueDate);
     const number = cleanText(cell(r, "numero"));
-    if (!number) throw new DocumentFormatError(`Página ${r.page}: factura emitida sin número.`);
+    if (!number) throw new DocumentFormatError(`${r.where}: factura emitida sin número.`);
     const baseCents = amount(r, "base imponible");
     const vatCents = amount(r, "impuestos");
     const totalCents = amount(r, "total");
     if (baseCents + vatCents !== totalCents) {
-      throw new DocumentFormatError(`Página ${r.page}: ${number} base + impuestos ≠ total.`);
+      throw new DocumentFormatError(`${r.where}: ${number} base + impuestos ≠ total.`);
     }
     const docPatient = normTaxId(cell(r, "doc ident paciente"));
     const docInvoice = normTaxId(cell(r, "doc ident"));
@@ -307,8 +333,7 @@ export function parseEmitidas(pages: PdfPage[]): ParsedDocument {
       counterparty: {
         kind: "paciente",
         tax_id: doc,
-        name: cleanText(cell(r, "razon social")) || doc || `Historia ${cleanText(cell(r, "historia"))}`,
-        clinical_record: cleanText(cell(r, "historia")) || null,
+        name: cleanText(cell(r, "razon social")) || doc || "",
         postal_code: /^\d{5}$/.test(postal) ? postal : null,
       },
       base_total: centsToNumber(baseCents),
@@ -329,7 +354,7 @@ export function parseEmitidas(pages: PdfPage[]): ParsedDocument {
   const [from, to] = dateRange(dates);
   return {
     kind: "optimydent_facturas_emitidas",
-    summary: `Facturas emitidas de Optimydent · ${invoices.length} facturas · ${table.pages} páginas`,
+    summary: `Facturas emitidas de Optimydent · ${invoices.length} facturas · ${table.origin}`,
     warnings,
     missingColumns: table.missing,
     coversFrom: from,
@@ -343,15 +368,13 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 // ── Saldos de pacientes ─────────────────────────────────────────────────────
 
-export function parseSaldos(pages: PdfPage[], asOf: string): ParsedDocument {
-  const table = readOptimydentTable(pages, SPEC_SALDOS);
+export function parseSaldos(table: Table, asOf: string): ParsedDocument {
   const lines: BalanceLine[] = table.rows.map((r) => {
     const phone = cell(r, "telefono").replace(/\D/g, "");
     const postal = cleanText(cell(r, "codigo postal"));
     return {
       tax_id: normTaxId(cell(r, "documento de identificacion")),
       name: cleanText(cell(r, "nombre")),
-      clinical_record: cleanText(cell(r, "no historia")) || null,
       phone: phone || null,
       postal_code: /^\d{5}$/.test(postal) ? postal : null,
       balance: centsToNumber(amount(r, "saldo")),

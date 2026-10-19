@@ -29,7 +29,16 @@ export type IngestReport = {
 
 type Db = ReturnType<typeof createAdminClient>;
 
-const EXT: Record<string, string> = { "application/pdf": ".pdf", "text/csv": ".csv" };
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const EXT: Record<string, string> = { "application/pdf": ".pdf", "text/csv": ".csv", [XLSX_MIME]: ".xlsx" };
+
+function mimeOf(file: { name: string; type: string }): string {
+  if (file.type) return file.type;
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".csv")) return "text/csv";
+  if (name.endsWith(".xlsx")) return XLSX_MIME;
+  return "application/pdf";
+}
 
 export async function ingestFile(
   file: { name: string; type: string; bytes: Uint8Array },
@@ -130,7 +139,7 @@ async function storeOriginal(
   parsed: ParsedDocument,
   runId: string,
 ): Promise<string> {
-  const mime = file.type || (file.name.toLowerCase().endsWith(".csv") ? "text/csv" : "application/pdf");
+  const mime = mimeOf(file);
   const year = (parsed.coversTo ?? new Date().toISOString()).slice(0, 4);
   const path = `${parsed.kind}/${year}/${sha}${EXT[mime] ?? ""}`;
   const { error: upError } = await db.storage

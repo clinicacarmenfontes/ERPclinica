@@ -1,12 +1,12 @@
--- Listados de Optimydent con columnas secundarias ausentes (concepto, nº de
--- historia, código postal…): las columnas se eligen a mano al exportar y a
+-- Listados de Optimydent con columnas secundarias ausentes (concepto, código
+-- postal…): las columnas se eligen a mano al exportar y a
 -- veces falta alguna. Si después se sube el listado con esas columnas, la
 -- factura ya existe (misma huella) y solo se COMPLETAN los datos vacíos:
 -- nunca se pisa un dato que ya tenga valor (puede ser una edición manual).
 --
 --   · invoice_lines.description  → la única columna de las líneas que se
 --     puede rellenar, y solo de NULL a un valor. El resto sigue inmutable.
---   · parties.clinical_record / postal_code de la contrapartida.
+--   · parties.postal_code de la contrapartida.
 --
 -- fn_ingest_invoice pasa a ser un envoltorio de la versión anterior
 -- (fn_ingest_invoice_base): mismo contrato, y si la factura ya existía y se
@@ -66,13 +66,11 @@ begin
   get diagnostics v_rows = row_count;
   v_n := v_n + v_rows;
 
-  -- Contrapartida: nº de historia y código postal si estaban vacíos.
-  update erp.parties set
-    clinical_record = coalesce(clinical_record, nullif(trim(p->'counterparty'->>'clinical_record'), '')),
-    postal_code = coalesce(postal_code, nullif(trim(p->'counterparty'->>'postal_code'), ''))
-  where id = v_inv.counterparty_id
-    and ((clinical_record is null and nullif(trim(p->'counterparty'->>'clinical_record'), '') is not null)
-      or (postal_code is null and nullif(trim(p->'counterparty'->>'postal_code'), '') is not null));
+  -- Contrapartida: código postal si estaba vacío.
+  update erp.parties set postal_code = nullif(trim(p->'counterparty'->>'postal_code'), '')
+   where id = v_inv.counterparty_id
+     and postal_code is null
+     and nullif(trim(p->'counterparty'->>'postal_code'), '') is not null;
   get diagnostics v_rows = row_count;
   v_n := v_n + v_rows;
 
