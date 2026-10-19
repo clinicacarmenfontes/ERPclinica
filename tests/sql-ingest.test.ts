@@ -186,6 +186,40 @@ describe("fn_ingest_invoices", () => {
     );
     expect(x).toMatchObject({ kind: "paciente", tax_id: "11111111H", clinical_record: "8", account_code: "70500000" });
   });
+
+  it("listado subido otra vez con columnas secundarias añadidas → solo completa los datos vacíos", async () => {
+    const [r] = await ingest([gasto({ counterparty: { kind: "proveedor", tax_id: "B12345678", name: "Finandreu S.L." } })]);
+    const [again] = await ingest([
+      gasto({
+        counterparty: { kind: "proveedor", tax_id: "B12345678", name: "Finandreu S.L.", postal_code: "08001" },
+        lines: [{ base: 1221.23, vat_rate: 0.21, vat_amount: 256.46, description: "Alquiler octubre" }],
+      }),
+    ]);
+    expect(again).toMatchObject({ result: "completada", invoice_id: r.invoice_id });
+    const x = await one(
+      `select l.description, p.postal_code from erp.invoices i
+         join erp.invoice_lines l on l.invoice_id = i.id join erp.parties p on p.id = i.counterparty_id`,
+    );
+    expect(x).toMatchObject({ description: "Alquiler octubre", postal_code: "08001" });
+
+    // Lo que ya tiene valor no se pisa, y la tercera subida no cambia nada.
+    const [third] = await ingest([
+      gasto({ lines: [{ base: 1221.23, vat_rate: 0.21, vat_amount: 256.46, description: "Otro texto" }] }),
+    ]);
+    expect(third.result).toBe("sin_cambios");
+    expect((await one("select description from erp.invoice_lines")).description).toBe("Alquiler octubre");
+  });
+
+  it("las líneas siguen siendo inmutables salvo rellenar una descripción vacía", async () => {
+    await ingest([gasto()]);
+    await expect(db.query("update erp.invoice_lines set base = 1")).rejects.toThrow(/inmutable/);
+    await expect(db.query("update erp.invoice_lines set description = 'x', account_code = null")).rejects.toThrow(
+      /inmutable/,
+    );
+    await expect(db.query("delete from erp.invoice_lines")).rejects.toThrow(/inmutable/);
+    await db.query("update erp.invoice_lines set description = 'Alquiler'");
+    await expect(db.query("update erp.invoice_lines set description = 'Otro'")).rejects.toThrow(/inmutable/);
+  });
 });
 
 describe("bancos y saldos", () => {

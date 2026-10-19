@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 const STAT_LABELS: Record<string, string> = {
   insertada: "nuevas",
   actualizada: "actualizadas",
+  completada: "completadas con datos nuevos",
   sin_cambios: "sin cambios",
   conflicto: "conflictos",
   conflicto_pendiente: "conflictos ya pendientes",
@@ -131,6 +132,12 @@ export function UploadPanel({ today }: { today: string }) {
                       .filter(([, n]) => n > 0)
                       .map(([k, n]) => `${n} ${STAT_LABELS[k] ?? k.replace(/_/g, " ")}`)
                       .join(" · ")}
+                  </p>
+                )}
+                {r.missingColumns && (
+                  <p className="text-xs text-warning">
+                    Faltan columnas secundarias: {r.missingColumns.join(", ")}. Se han dejado vacías; si las necesitas,
+                    exporta de nuevo el listado con ellas y súbelo: solo se completarán esos datos.
                   </p>
                 )}
                 {r.warnings.length > 0 && (

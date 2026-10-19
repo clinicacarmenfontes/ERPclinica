@@ -22,6 +22,8 @@ export type IngestReport = {
   message?: string;
   stats?: Record<string, number>;
   warnings: string[];
+  /** Columnas secundarias ausentes: se puede volver a subir el listado con ellas. */
+  missingColumns?: string[];
   runId?: string;
 };
 
@@ -68,6 +70,7 @@ export async function ingestFile(
     kind: parsed.kind,
     summary: parsed.summary,
     warnings: [...parsed.warnings],
+    missingColumns: parsed.missingColumns?.length ? parsed.missingColumns : undefined,
     runId: runId as string,
   };
 
@@ -93,7 +96,7 @@ export async function ingestFile(
     }
     report.stats = stats;
     const withIssues = (stats.error ?? 0) + (stats.conflicto ?? 0) + (stats.periodo_cerrado ?? 0) > 0;
-    report.status = withIssues || report.warnings.length > 0 ? "avisos" : "ok";
+    report.status = withIssues || report.warnings.length > 0 || report.missingColumns ? "avisos" : "ok";
     await db
       .from("sync_runs")
       .update({
@@ -101,7 +104,12 @@ export async function ingestFile(
         finished_at: new Date().toISOString(),
         period_from: parsed.coversFrom,
         period_to: parsed.coversTo,
-        stats: { ...stats, fichero: file.name, avisos: report.warnings.slice(0, 50) },
+        stats: {
+          ...stats,
+          fichero: file.name,
+          avisos: report.warnings.slice(0, 50),
+          columnas_no_exportadas: report.missingColumns ?? [],
+        },
       })
       .eq("id", runId as string);
     return report;
