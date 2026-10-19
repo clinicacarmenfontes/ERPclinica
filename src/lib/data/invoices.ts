@@ -89,3 +89,19 @@ export async function monthlyTotals(year: number): Promise<MonthlyTotals[]> {
     outstanding: Number(r.outstanding),
   }));
 }
+
+export type ReviewInvoice = InvoiceRow & { expense_type_id: string | null };
+
+/** Todas las facturas vivas marcadas para revisar, de cualquier periodo. */
+export async function listReviewInvoices(): Promise<ReviewInvoice[]> {
+  const { data, error } = await createAdminClient()
+    .from("invoices")
+    .select(`${SELECT}, expense_type_id`)
+    .eq("needs_review", true)
+    .neq("status", "anulada")
+    .order("issue_date", { ascending: false })
+    .range(0, 1999)
+    .returns<ReviewInvoice[]>();
+  if (error) throw error;
+  return data;
+}

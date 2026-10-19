@@ -84,7 +84,7 @@ export const REVIEW_REASONS: Record<string, string> = {
   linea_repetida_en_origen: "Línea repetida en Optimydent",
   tipos_distintos_en_factura: "Varios tipos de gasto",
   iva_no_cuadra: "IVA no cuadra con el tipo",
-  ia_baja_confianza: "Lectura IA dudosa",
+  ia_baja_confianza: "Lectura automática dudosa",
   ia_no_cuadra: "Los importes leídos no cuadran",
   sin_fecha: "Sin fecha",
   lectura_incompleta: "Lectura incompleta",

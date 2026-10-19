@@ -112,7 +112,7 @@ Probado en PGlite: duplicado exacto, mismo nº con otro importe, líneas descuad
 | 3b. Repositorio de facturas (OneDrive de info@ + lectura con Claude) | ✅ código y tests (migración 0003). Falta conectarlo: compartir la carpeta, añadir el permiso en Entra y configurar las variables |
 | 3c. RPA "Sincronizar Gestión" | pendiente |
 | 4. Motor de recurrencia/anomalías (Claude) | pendiente |
-| 5. Dashboard, contabilización, fiscal y Excel del gestor | pendiente (hay un Resumen provisional) |
+| 5. Dashboard, contabilización, fiscal y Excel del gestor | Resumen completo (KPIs mes/año, Ingresos vs Gastos, cashflow 13 semanas, avisos de recurrentes por reglas, últimos movimientos), Revisión, Fiscal (303 con prorrata, 111, 115, 347, cierre/reapertura) ✅ · contabilización y Excel del gestor pendientes |
 
 Notas de la ingesta real de 3T2026:
 - El PDF de Gastos corta la última columna ("Asiento contable") en el borde del A4. La cuenta se toma del **tipo de gasto**, no de esa columna.
