@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "@/lib/ingest/parsers";
 import { parseCaixaBankCsv } from "@/lib/ingest/parsers/banks";
+import { parseGastos } from "@/lib/ingest/parsers/optimydent";
+import type { PdfPage, PdfWord } from "@/lib/ingest/parsers/pdf";
 import { DocumentFormatError, type ParsedDocument } from "@/lib/ingest/types";
 
 // Ficheros reales de 3T2026 en tests/fixtures/private/ (fuera del repositorio:
@@ -106,5 +108,45 @@ describe.skipIf(!hasPrivate)("ficheros reales 3T2026", () => {
     expect(doc.warnings.join()).toMatch(/0,00/);
     const last = doc.transactions[doc.transactions.length - 1];
     expect(last.balance_after).toBe(36617.42);
+  });
+});
+
+describe("Optimydent: columnas elegidas a mano (sintético)", () => {
+  // Página con cabecera #3f4c6b de 80 pt por columna y una fila por registro.
+  function page(headers: string[], rows: string[][]): PdfPage {
+    const W = 80;
+    const rects = headers.map((_, i) => ({ x0: i * W, x1: (i + 1) * W, top: 10, bottom: 20, color: "#3f4c6b" }));
+    const word = (text: string, col: number, top: number): PdfWord => ({
+      text, x0: col * W + 2, x1: col * W + 2 + text.length * 3, top, bottom: top + 8, page: 1,
+    });
+    const words = [
+      ...headers.flatMap((h, i) => h.split(" ").map((t, j) => ({ ...word(t, i, 11), x0: i * W + 2 + j * 15, x1: i * W + 14 + j * 15 }))),
+      ...rows.flatMap((r, k) => r.map((t, i) => word(t, i, 30 + k * 12)).filter((w) => w.text)),
+    ];
+    return { number: 1, width: W * headers.length, height: 600, words, rects };
+  }
+  const headers = [
+    "Fecha", "Email", "Razón social", "CIF", "Nota interna", "Tipo de gasto", "Factura", "Cantidad", "Impuestos",
+    "Tipo de impuesto",
+  ];
+  const row = [
+    "01/09/2026", "x@y.es", "ACME", "B12345678", "secreto", "Alquiler", "F-1", "121,00", "21,00", "IVA(21,00%)",
+  ];
+
+  it("admite columnas de más y en otro orden, sin conservar las que no van a BBDD", () => {
+    const doc = expectKind(parseGastos([page(headers, [row])]), "optimydent_gastos");
+    expect(doc.invoices).toHaveLength(1);
+    expect(doc.invoices[0]).toMatchObject({ issuer_tax_id: "B12345678", invoice_number: "F-1", total: 121, vat_total: 21 });
+    expect(doc.invoices[0]).toMatchObject({ expense_type: "Alquiler" });
+    expect(doc.invoices[0].lines[0]).toMatchObject({ vat_rate: 0.21, account_code: null, description: null });
+    expect(JSON.stringify(doc.invoices)).not.toMatch(/secreto|x@y/);
+    expect(doc.warnings.join()).toMatch(/adicionales ignoradas: email, nota interna/);
+    expect(doc.missingColumns).toEqual(["proveedor", "forma de pago", "concepto", "asiento contable"]);
+  });
+
+  it("rechaza el listado si falta una columna imprescindible", () => {
+    const without = (col: number) => [headers.filter((_, i) => i !== col), row.filter((_, i) => i !== col)] as const;
+    const [h, r] = without(headers.indexOf("Factura"));
+    expect(() => parseGastos([page(h, [r])])).toThrow(/imprescindibles para la contabilidad: factura/);
   });
 });

@@ -10,25 +10,50 @@ import {
   parseEsDate,
 } from "../normalize";
 import { DocumentFormatError, type BalanceLine, type InvoiceLine, type NormalizedInvoice, type ParsedDocument } from "../types";
-import { readOptimydentTable, type TableRow } from "./optimydent-table";
+import { readOptimydentTable, type TableRow, type TableSpec } from "./optimydent-table";
 import type { PdfPage } from "./pdf";
 
 // Port de contabilidad/optimydent.py + agrupación de líneas por factura.
 
-export const COLS_SALDOS = [
-  "no historia", "nombre", "documento de identificacion", "telefono", "codigo postal",
-  "fecha de nacimiento", "saldo", "estado de paciente",
-];
-export const COLS_EMITIDAS = [
-  "fecha factura", "numero", "historia", "doc ident paciente", "razon social", "doc ident",
-  "direccion", "codigo postal", "base imponible", "impuestos", "total", "forma de pago", "fecha de pago",
-];
-export const COLS_GASTOS = [
-  "proveedor", "razon social", "cif", "tipo de gasto", "forma de pago", "fecha", "concepto",
-  "cantidad", "impuestos", "tipo de impuesto", "factura", "asiento contable",
-];
-
+// Solo se leen las columnas que acaban en BBDD; cualquier otra que se haya
+// marcado al exportar (email, teléfono…) se ignora.
+//   · Obligatorias: las que necesita la contabilidad. Identifican la factura
+//     (emisor, nº, fecha, total → huella antiduplicados) o fijan datos que ya
+//     no se pueden cambiar una vez dada de alta (importes, IVA, cuenta, cobro).
+//   · Secundarias: si faltan se avisa y se dejan vacías. Volver a subir el
+//     listado con ellas completa SOLO esos datos (fn_fill_invoice_gaps).
 const DATE_ANCHOR = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+
+export const SPEC_SALDOS: TableSpec = {
+  columns: ["no historia", "nombre", "documento de identificacion", "telefono", "codigo postal", "saldo"],
+  // Sin documento, el paciente se identificaría por el nombre y se duplicaría.
+  required: ["no historia", "nombre", "documento de identificacion", "saldo"],
+  anchorColumn: "no historia",
+  anchorRe: /^\d+$/,
+};
+export const SPEC_EMITIDAS: TableSpec = {
+  columns: [
+    "fecha factura", "numero", "historia", "doc ident paciente", "razon social", "doc ident",
+    "codigo postal", "base imponible", "impuestos", "total", "forma de pago", "fecha de pago",
+  ],
+  required: [
+    "fecha factura", "numero", "razon social", ["doc ident paciente", "doc ident"],
+    "base imponible", "impuestos", "total", "fecha de pago",
+  ],
+  anchorColumn: "fecha factura",
+  anchorRe: DATE_ANCHOR,
+};
+export const SPEC_GASTOS: TableSpec = {
+  columns: [
+    "proveedor", "razon social", "cif", "tipo de gasto", "forma de pago", "fecha", "concepto",
+    "cantidad", "impuestos", "tipo de impuesto", "factura", "asiento contable",
+  ],
+  // La cuenta sale del tipo de gasto ("asiento contable" llega cortado por el
+  // borde del A4) y las líneas no se pueden cambiar después: ambos obligatorios.
+  required: ["razon social", "cif", "fecha", "factura", "cantidad", "impuestos", "tipo de impuesto", "tipo de gasto"],
+  anchorColumn: "fecha",
+  anchorRe: DATE_ANCHOR,
+};
 
 /** Reconoce el listado por el título de la primera página ("Gastos | Optimydent"…). */
 export function detectOptimydentKind(title: string): "gastos" | "emitidas" | "saldos" | null {
@@ -98,7 +123,7 @@ type GastoRow = {
 };
 
 export function parseGastos(pages: PdfPage[]): ParsedDocument {
-  const table = readOptimydentTable(pages, COLS_GASTOS, "fecha", DATE_ANCHOR);
+  const table = readOptimydentTable(pages, SPEC_GASTOS);
   const warnings = [...table.warnings];
   const rows: GastoRow[] = table.rows.map((r) => {
     const supplier = cleanText(cell(r, "proveedor"));
@@ -214,6 +239,7 @@ export function parseGastos(pages: PdfPage[]): ParsedDocument {
     kind: "optimydent_gastos",
     summary: `Gastos de Optimydent · ${rows.length} líneas → ${invoices.length} facturas · ${table.pages} páginas`,
     warnings,
+    missingColumns: table.missing,
     coversFrom: from,
     coversTo: to,
     invoices,
@@ -224,7 +250,7 @@ export function parseGastos(pages: PdfPage[]): ParsedDocument {
 // ── Facturas emitidas (pacientes) ───────────────────────────────────────────
 
 export function parseEmitidas(pages: PdfPage[]): ParsedDocument {
-  const table = readOptimydentTable(pages, COLS_EMITIDAS, "fecha factura", DATE_ANCHOR);
+  const table = readOptimydentTable(pages, SPEC_EMITIDAS);
   const warnings = [...table.warnings];
   const byNumber = new Map<string, NormalizedInvoice>();
   const dates: string[] = [];
@@ -305,6 +331,7 @@ export function parseEmitidas(pages: PdfPage[]): ParsedDocument {
     kind: "optimydent_facturas_emitidas",
     summary: `Facturas emitidas de Optimydent · ${invoices.length} facturas · ${table.pages} páginas`,
     warnings,
+    missingColumns: table.missing,
     coversFrom: from,
     coversTo: to,
     invoices,
@@ -317,7 +344,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 // ── Saldos de pacientes ─────────────────────────────────────────────────────
 
 export function parseSaldos(pages: PdfPage[], asOf: string): ParsedDocument {
-  const table = readOptimydentTable(pages, COLS_SALDOS, "no historia", /^\d+$/);
+  const table = readOptimydentTable(pages, SPEC_SALDOS);
   const lines: BalanceLine[] = table.rows.map((r) => {
     const phone = cell(r, "telefono").replace(/\D/g, "");
     const postal = cleanText(cell(r, "codigo postal"));
@@ -344,6 +371,7 @@ export function parseSaldos(pages: PdfPage[], asOf: string): ParsedDocument {
     asOf,
     summary: `Saldos ${side} de Optimydent · ${lines.length} pacientes · total ${total.toFixed(2)} €`,
     warnings: table.warnings,
+    missingColumns: table.missing,
     coversFrom: asOf,
     coversTo: asOf,
     lines,

@@ -87,6 +87,7 @@ Así puedes actualizar cada semana, cada mes o cada trimestre sin que los númer
    - Factura sin número → el pipeline genera `SN-AAAAMMDD-<total>` y la marca para revisión.
 2. **Segunda barrera**: `UNIQUE (dirección, emisor, nº, ejercicio)`. Si llega la misma factura con otro importe o fecha, **no se inserta**: va a `ingest_conflicts` para que decidas.
 3. **Merge**: solo cambian `status`, `paid_amount`, `paid_at`, `due_date` y la categoría; cada cambio de estado queda en `invoice_status_history`. *Atrasado* no se guarda: se deriva de `due_date` en `v_invoices`.
+   - Además se **completan datos vacíos** (nunca se pisan): descripción de las líneas (concepto) y nº de historia / código postal de la contrapartida (`fn_fill_invoice_gaps`, resultado `completada`).
 4. **Inmutabilidad real en BBDD**: Diario, líneas, documentos origen, extractos y auditoría rechazan UPDATE/DELETE/TRUNCATE. Partida doble comprobada al COMMIT. Cadena de hashes verificable con `verify_journal_chain()`.
 5. **Cierre de trimestre** (`tax_periods`): tras entregar al gestor, no se pueden dar de alta ni reclasificar facturas de ese trimestre; sí registrar cobros/pagos posteriores.
 6. **Saldos de pacientes**: fotos fechadas (`balance_snapshots`), no facturas.
@@ -95,6 +96,7 @@ Así puedes actualizar cada semana, cada mes o cada trimestre sin que los númer
 9. **RLS sin políticas** en todo: solo el servidor (clave secreta) lee y escribe.
 10. **Edición**: matriz completa en [`procedimientos-edicion.md`](procedimientos-edicion.md). La base de datos exige motivo para anular o reabrir, bloquea cualquier cambio en facturas anuladas y deja las anuladas como "lápida" para que un dato erróneo no vuelva a entrar.
 11. **Auth y BBDD**: el mismo proyecto Supabase que el CRM (el plan gratuito permite 2 proyectos), en el esquema `erp`. Los usuarios del CRM no tienen permisos sobre él, el ERP tiene su propia clave secreta y el login de Microsoft es compartido. Lo comprueba `tests/coexistence-crm.test.ts`.
+12. **Columnas de los listados de Optimydent**: se eligen a mano al exportar, así que se localizan por nombre (orden libre) y las que no van a BBDD se ignoran. Las imprescindibles para la contabilidad (identidad de la factura, importes, IVA, tipo de gasto, fecha de pago, NIF) son obligatorias y su ausencia rechaza el fichero; si falta una secundaria se avisa, se deja vacía y se puede volver a subir el listado con ella para completarla. Detalle en `SPEC_*` de `src/lib/ingest/parsers/optimydent.ts`.
 
 Probado en PGlite: duplicado exacto, mismo nº con otro importe, líneas descuadradas, total ≠ base + IVA, cambio de importe, borrado, asiento descuadrado, UPDATE/DELETE/TRUNCATE del Diario, cadena manipulada y alta en trimestre cerrado → **todo bloqueado**; merge Pendiente → Pagada → registrado en historial.
 

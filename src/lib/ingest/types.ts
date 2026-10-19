@@ -65,6 +65,8 @@ type Common = {
   /** Texto para la pantalla: "Gastos de Optimydent · 212 líneas · 12 páginas". */
   summary: string;
   warnings: string[];
+  /** Columnas secundarias que no venían en el listado (se dejan vacías). */
+  missingColumns?: string[];
   coversFrom: string | null;
   coversTo: string | null;
 };
