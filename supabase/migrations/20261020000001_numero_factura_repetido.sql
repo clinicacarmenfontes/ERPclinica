@@ -25,16 +25,16 @@ as $$
 $$;
 
 -- ── Nº compartido aceptado a sabiendas ─────────────────────────────────────
-alter table erp.invoices add column shares_number boolean not null default false;
+alter table erp.invoices add column if not exists shares_number boolean not null default false;
 comment on column erp.invoices.shares_number is
   'Comparte emisor + nº + año con otra factura viva y se decidió mantener ambas (conflicto «mantener_ambas»).';
 
-drop index erp.invoices_natural_key_live_idx;
+drop index if exists erp.invoices_natural_key_live_idx;
 create unique index invoices_natural_key_live_idx on erp.invoices
   (direction, issuer_key, invoice_number_norm, fiscal_year)
   where status <> 'anulada' and not shares_number and not erp.is_placeholder_invoice_number(invoice_number);
 
-alter table erp.ingest_conflicts drop constraint ingest_conflicts_resolution_check;
+alter table erp.ingest_conflicts drop constraint if exists ingest_conflicts_resolution_check;
 alter table erp.ingest_conflicts add constraint ingest_conflicts_resolution_check
   check (resolution in (
     'pendiente',
