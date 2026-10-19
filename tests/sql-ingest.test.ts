@@ -222,6 +222,126 @@ describe("fn_ingest_invoices", () => {
   });
 });
 
+describe("nº de factura compartido", () => {
+  const seguro = (date: string) =>
+    gasto({
+      issuer_tax_id: "A28007748",
+      issuer_name: "Mapfre Seguros",
+      invoice_number: "-",
+      issue_date: date,
+      paid_at: date,
+      base_total: 85.2,
+      vat_total: 0,
+      total: 85.2,
+      expense_type: "Seguros",
+      lines: [{ base: 85.2, vat_rate: 0, vat_amount: 0, vat_exempt_reason: "Exento" }],
+    });
+  const otra = () =>
+    gasto({
+      issue_date: "2026-08-03",
+      paid_at: "2026-08-03",
+      total: 1500,
+      base_total: 1243.54,
+      lines: [{ base: 1243.54, vat_rate: 0.21, vat_amount: 256.46 }],
+    });
+  const live = async () =>
+    (
+      await db.query<{ id: string; issue_date: string; shares_number: boolean; review_reasons: string[]; notes: string | null }>(
+        "select id, issue_date::text, shares_number, review_reasons, notes from erp.invoices where status <> 'anulada' order by issue_date",
+      )
+    ).rows;
+
+  it("cargos mensuales sin nº («-»): todos se registran, sin conflicto, marcados «sin nº»", async () => {
+    const meses = ["2026-07-05", "2026-08-05", "2026-09-05"];
+    expect((await ingest(meses.map(seguro))).map((r) => r.result)).toEqual(["insertada", "insertada", "insertada"]);
+    expect((await ingest(meses.map(seguro))).map((r) => r.result)).toEqual(["sin_cambios", "sin_cambios", "sin_cambios"]);
+    const rows = await live();
+    expect(rows).toHaveLength(3);
+    expect(rows.every((r) => r.review_reasons.includes("sin_numero"))).toBe(true);
+    const c = await one<{ n: number }>("select count(*)::int as n from erp.ingest_conflicts");
+    expect(c.n).toBe(0);
+  });
+
+  it("conflicto de un cargo sin nº ya existente → «mantener ambas» lo registra sin marcar nº repetido", async () => {
+    const [first] = await ingest([seguro("2026-07-05")]);
+    const incoming = { ...seguro("2026-08-05"), dedup_hash: "x" };
+    const { id } = await one<{ id: string }>(
+      "insert into erp.ingest_conflicts (sync_run_id, existing_invoice_id, incoming, differences) values ($1, $2, $3, '{}') returning id",
+      [runId, first.invoice_id, JSON.stringify(incoming)],
+    );
+    await db.query("select erp.fn_resolve_conflict($1, 'mantener_ambas', null, 'admin')", [id]);
+    const rows = await live();
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => !r.shares_number && r.review_reasons.includes("sin_numero"))).toBe(true);
+  });
+
+  it("mismo nº con otra fecha e importe → «mantener ambas»: las dos vivas, marcadas y con nota cruzada", async () => {
+    await ingest([gasto()]);
+    const [c] = await ingest([otra()]);
+    expect(c.result).toBe("conflicto");
+    await db.query("select erp.fn_resolve_conflict($1, 'mantener_ambas', null, 'admin')", [c.conflict_id]);
+
+    const rows = await live();
+    expect(rows).toHaveLength(2);
+    for (const r of rows) {
+      expect(r.shares_number).toBe(true);
+      expect(r.review_reasons).toContain("numero_factura_repetido");
+    }
+    expect(rows[0].notes).toMatch(/otra del 06\/10\/2026 por 1477,69 €/);
+    expect(rows[1].notes).toMatch(/otra del 03\/08\/2026 por 1500,00 €/);
+
+    // Volver a subir el listado no crea nada nuevo ni más conflictos.
+    expect((await ingest([gasto(), otra()])).map((r) => r.result)).toEqual(["sin_cambios", "sin_cambios"]);
+    // Un tercer dato con el mismo nº vuelve a conflicto (una sola vez).
+    const tercera = gasto({ issue_date: "2026-09-01", paid_at: "2026-09-01" });
+    expect((await ingest([tercera]))[0].result).toBe("conflicto");
+    expect((await ingest([tercera]))[0].result).toBe("conflicto_pendiente");
+  });
+
+  it("después se puede anular una (no vuelve a entrar), corregir el nº de la otra y darla por revisada", async () => {
+    const [a] = await ingest([gasto()]);
+    const [c] = await ingest([otra()]);
+    const { id: b } = await one<{ id: string }>("select erp.fn_resolve_conflict($1, 'mantener_ambas', null, 'admin') as id", [
+      c.conflict_id,
+    ]);
+
+    await db.query("select erp.fn_void_invoice($1, 'Duplicada en Optimydent', 'admin')", [b]);
+    expect((await ingest([otra()]))[0].result).toBe("ignorada_anulada");
+
+    const { id: nueva } = await one<{ id: string }>(
+      "select erp.fn_correct_invoice_identity($1, 'A-101B', '2026-10-06', 'El nº correcto es A-101B', 'admin') as id",
+      [a.invoice_id],
+    );
+    const n = await one("select invoice_number, total::float as total, status, corrects_invoice_id from erp.invoices where id = $1", [nueva]);
+    expect(n).toMatchObject({ invoice_number: "A-101B", total: 1477.69, status: "pagada", corrects_invoice_id: a.invoice_id });
+    const lines = await one<{ n: number }>("select count(*)::int as n from erp.invoice_lines where invoice_id = $1", [nueva]);
+    expect(lines.n).toBe(1);
+
+    await db.query("update erp.invoices set needs_review = true, review_reasons = '{numero_factura_repetido}' where id = $1", [nueva]);
+    await db.query("select erp.fn_mark_invoice_reviewed($1, null, 'admin')", [nueva]);
+    expect(await one("select needs_review, review_reasons from erp.invoices where id = $1", [nueva])).toMatchObject({
+      needs_review: false,
+      review_reasons: [],
+    });
+  });
+
+  it("corregir a un nº que ya usa otra factura viva → error claro, sin anular nada", async () => {
+    const [a] = await ingest([gasto()]);
+    await ingest([gasto({ invoice_number: "A-102", issue_date: "2026-08-03", paid_at: "2026-08-03" })]);
+    await expect(
+      db.query("select erp.fn_correct_invoice_identity($1, 'A-102', '2026-10-06', 'Probando el nº repetido', 'admin')", [
+        a.invoice_id,
+      ]),
+    ).rejects.toThrow(/Ya hay otra factura de este emisor con el nº A-102/);
+    expect((await one("select status from erp.invoices where id = $1", [a.invoice_id])).status).toBe("pagada");
+  });
+
+  it("sin «mantener ambas», la base de datos sigue impidiendo dos facturas vivas con el mismo nº", async () => {
+    await ingest([gasto()]);
+    await expect(ingest([{ ...otra(), force_insert: true }])).resolves.toMatchObject([{ result: "error" }]);
+  });
+});
+
 describe("bancos y saldos", () => {
   it("descargas solapadas no duplican y los cargos idénticos del mismo día se distinguen por el saldo", async () => {
     const { id } = await one<{ id: string }>("select id from erp.bank_accounts where bank = 'caixabank'");

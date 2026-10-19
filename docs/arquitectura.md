@@ -86,6 +86,8 @@ Así puedes actualizar cada semana, cada mes o cada trimestre sin que los númer
    - Proveedor sin CIF (p. ej. *Vistaprint B.V*) → se usa el nombre normalizado.
    - Factura sin número → el pipeline genera `SN-AAAAMMDD-<total>` y la marca para revisión.
 2. **Segunda barrera**: `UNIQUE (dirección, emisor, nº, ejercicio)`. Si llega la misma factura con otro importe o fecha, **no se inserta**: va a `ingest_conflicts` para que decidas.
+   - Cargos **sin nº** (Optimydent pone "-", p. ej. seguros mensuales): no aplica la segunda barrera; cada cargo entra como registro propio (la huella ya los distingue por fecha/importe) marcado `sin_numero`.
+   - **Mantener ambas**: tercera salida del conflicto para dos facturas distintas con el mismo nº. Las dos quedan vivas con `shares_number`, marcadas `numero_factura_repetido` y con nota cruzada. Luego se anulan (`fn_void_invoice`), se corrige su nº/fecha (`fn_correct_invoice_identity`) o se dan por revisadas (`fn_mark_invoice_reviewed`) desde el menú de cada factura.
 3. **Merge**: solo cambian `status`, `paid_amount`, `paid_at`, `due_date` y la categoría; cada cambio de estado queda en `invoice_status_history`. *Atrasado* no se guarda: se deriva de `due_date` en `v_invoices`.
    - Además se **completan datos vacíos** (nunca se pisan): descripción de las líneas (concepto) y código postal de la contrapartida (`fn_fill_invoice_gaps`, resultado `completada`).
 4. **Inmutabilidad real en BBDD**: Diario, líneas, documentos origen, extractos y auditoría rechazan UPDATE/DELETE/TRUNCATE. Partida doble comprobada al COMMIT. Cadena de hashes verificable con `verify_journal_chain()`.
