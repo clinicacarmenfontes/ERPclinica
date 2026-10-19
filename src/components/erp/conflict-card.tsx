@@ -16,6 +16,12 @@ const FIELD_LABELS: Record<string, string> = {
   total: "Total",
 };
 
+const DONE = {
+  mantener_existente: "Se mantiene la factura existente",
+  sustituir_por_entrante: "Factura sustituida",
+  mantener_ambas: "Se mantienen las dos facturas, marcadas para revisar el nº",
+};
+
 function show(field: string, value: unknown) {
   if (value === null || value === undefined) return "—";
   if (field === "issue_date") return formatDate(String(value));
@@ -36,10 +42,10 @@ export function ConflictCard({
   const [note, setNote] = useState("");
   const [pending, startTransition] = useTransition();
 
-  function resolve(resolution: "mantener_existente" | "sustituir_por_entrante") {
+  function resolve(resolution: "mantener_existente" | "sustituir_por_entrante" | "mantener_ambas") {
     startTransition(async () => {
       const r = await resolveConflict(conflict.id, resolution, note);
-      if (r.ok) toast.success(resolution === "mantener_existente" ? "Se mantiene la factura existente" : "Factura sustituida");
+      if (r.ok) toast.success(DONE[resolution]);
       else toast.error(r.message);
     });
   }
@@ -51,7 +57,8 @@ export function ConflictCard({
           {conflict.invoice?.issuer_name} · {conflict.invoice?.invoice_number}
         </p>
         <p className="text-xs text-muted-foreground">
-          Ya existe una factura con este emisor, número y año, pero el dato entrante es distinto.
+          Ya existe una factura con este emisor, número y año, pero el dato entrante es distinto. Si son dos facturas
+          distintas (p. ej. un nº repetido por error), mantén ambas: quedarán marcadas para revisar.
         </p>
       </div>
       <table className="w-full text-sm">
@@ -81,6 +88,9 @@ export function ConflictCard({
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" disabled={pending} onClick={() => resolve("mantener_existente")}>
           Mantener la existente
+        </Button>
+        <Button size="sm" variant="outline" disabled={pending} onClick={() => resolve("mantener_ambas")}>
+          Mantener ambas
         </Button>
         <Button size="sm" disabled={pending} onClick={() => resolve("sustituir_por_entrante")}>
           Sustituir por la entrante

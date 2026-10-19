@@ -78,6 +78,7 @@ export const REVIEW_REASONS: Record<string, string> = {
   tipo_gasto_nuevo: "Tipo de gasto nuevo",
   tipo_gasto_sin_cuenta: "Tipo sin cuenta contable",
   sin_numero: "Sin nº de factura",
+  numero_factura_repetido: "Nº de factura repetido en otra factura (se mantienen ambas)",
   sin_nif: "Sin NIF",
   nif_emisor_es_la_clinica: "CIF del proveedor = el de la clínica",
   linea_repetida_en_origen: "Línea repetida en Optimydent",

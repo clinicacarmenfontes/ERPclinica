@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { InvoiceActions } from "@/components/erp/invoice-actions";
 import {
   EmptyState,
   KpiCard,
@@ -106,6 +107,7 @@ export async function InvoicesPage({
                 {!isIncome && <TableHead className="text-right">Ret.</TableHead>}
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Estado</TableHead>
+                <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -118,7 +120,7 @@ export async function InvoicesPage({
                       <span className="inline-flex items-center gap-1.5">
                         {r.invoice_number}
                         {r.needs_review && (
-                          <span title={r.review_reasons.map((x) => REVIEW_REASONS[x] ?? x).join(" · ")}>
+                          <span title={[...r.review_reasons.map((x) => REVIEW_REASONS[x] ?? x), r.notes].filter(Boolean).join(" · ")}>
                             <AlertTriangle className="size-3.5 text-warning" />
                           </span>
                         )}
@@ -153,6 +155,20 @@ export async function InvoicesPage({
                     <TableCell className="text-right font-medium tabular-nums">{formatCurrency(r.total)}</TableCell>
                     <TableCell>
                       <StatusBadge status={effectiveStatus(r.status, r.due_date, today)} />
+                    </TableCell>
+                    <TableCell>
+                      {r.status !== "anulada" && (
+                        <InvoiceActions
+                          invoice={{
+                            id: r.id,
+                            invoice_number: r.invoice_number,
+                            issue_date: r.issue_date,
+                            party: party?.name ?? r.issuer_name,
+                            total: r.total,
+                            needs_review: r.needs_review,
+                          }}
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 );

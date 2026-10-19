@@ -30,7 +30,7 @@ export async function uploadDocument(formData: FormData): Promise<IngestReport> 
 
 export async function resolveConflict(
   conflictId: string,
-  resolution: "mantener_existente" | "sustituir_por_entrante",
+  resolution: "mantener_existente" | "sustituir_por_entrante" | "mantener_ambas",
   note: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const { email } = await requireAdmin();
